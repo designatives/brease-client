@@ -158,7 +158,7 @@ Supabase Storage URLs are rewritten to image transformation URLs; other URLs pas
 Every call is a plain REST request:
 
 ```sh
-curl -H "Authorization: Bearer $BREASE_TOKEN" "https://api.brease.io/v1/page?slug=about&locale=en"
+curl -H "Authorization: Bearer $BREASE_TOKEN" "https://api.brease.io/content-api/page?slug=about&locale=en"
 ```
 
-Routes: `GET /v1/site`, `/v1/pages?locale=`, `/v1/page?slug=&locale=`, `/v1/navigations/:key?locale=`, `/v1/redirects`, `/v1/release`.
+Routes: `GET /content-api/site`, `/content-api/pages?locale=`, `/content-api/page?slug=&locale=`, `/content-api/navigations/:key?locale=`, `/content-api/redirects`, `/content-api/release`.

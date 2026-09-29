@@ -43,12 +43,12 @@ describe('createBrease', () => {
     await b.getRedirects()
     await b.getRelease()
     expect(calls.map((c) => c.url)).toEqual([
-      'https://api.test/v1/site',
-      'https://api.test/v1/pages?locale=en',
-      'https://api.test/v1/page?slug=about&locale=en',
-      'https://api.test/v1/navigations/main?locale=hu',
-      'https://api.test/v1/redirects',
-      'https://api.test/v1/release'
+      'https://api.test/content-api/site',
+      'https://api.test/content-api/pages?locale=en',
+      'https://api.test/content-api/page?slug=about&locale=en',
+      'https://api.test/content-api/navigations/main?locale=hu',
+      'https://api.test/content-api/redirects',
+      'https://api.test/content-api/release'
     ])
     expect(calls[0]?.headers).toEqual({
       authorization: 'Bearer brs_live_x',
@@ -63,7 +63,7 @@ describe('createBrease', () => {
     vi.stubEnv('BREASE_API_URL', 'http://localhost:4100')
     const a = mockFetch([json([])])
     await createBrease({ fetch: a.fetch }).getRedirects()
-    expect(a.calls[0]?.url).toBe('http://localhost:4100/v1/redirects')
+    expect(a.calls[0]?.url).toBe('http://localhost:4100/content-api/redirects')
     expect(a.calls[0]?.headers['x-brease-commit']).toBe('deadbeef')
     expect(a.calls[0]?.headers.authorization).toBe('Bearer env-token')
     const b = mockFetch([json([])])

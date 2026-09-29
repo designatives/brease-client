@@ -83,26 +83,26 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
 
   const client: Brease = {
     getSite() {
-      sitePromise ??= request<Site>('/v1/site').catch((err) => {
+      sitePromise ??= request<Site>('/content-api/site').catch((err) => {
         sitePromise = undefined
         throw err
       })
       return sitePromise
     },
     getPage<T>(slug: string, { locale }: { locale: string }) {
-      return request<Page<T>>('/v1/page', { slug, locale }, true)
+      return request<Page<T>>('/content-api/page', { slug, locale }, true)
     },
     getPages(o = {}) {
-      return request<PageRef[]>('/v1/pages', { locale: o.locale })
+      return request<PageRef[]>('/content-api/pages', { locale: o.locale })
     },
     getNavigation(key, { locale }) {
-      return request<Navigation>(`/v1/navigations/${encodeURIComponent(key)}`, { locale }, true)
+      return request<Navigation>(`/content-api/navigations/${encodeURIComponent(key)}`, { locale }, true)
     },
     getRedirects() {
-      return request<Redirect[]>('/v1/redirects')
+      return request<Redirect[]>('/content-api/redirects')
     },
     getRelease() {
-      return request<Release>('/v1/release')
+      return request<Release>('/content-api/release')
     },
     async resolve(pathname) {
       const site = await client.getSite()
