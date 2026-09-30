@@ -58,13 +58,16 @@ export function toMetadata(seo: ResolvedSeo, opts: { xDefault?: string } = {}): 
   })
 }
 
-// fetch for createBrease({ fetch }) that tags every request so revalidateTag('brease') purges it.
+// fetch for createBrease({ fetch }) that tags every request so revalidateTag('brease') purges it. In the
+// Brease editor's preview (BREASE_PREVIEW=1) nothing is cached, so every edit shows on the next render.
 export function breaseFetch(tags: string[] = [], revalidate?: number | false): typeof fetch {
   return (input, init) =>
-    fetch(input, {
-      ...init,
-      next: { tags: ['brease', ...tags], ...(revalidate !== undefined ? { revalidate } : {}) }
-    } as RequestInit)
+    env('BREASE_PREVIEW')
+      ? fetch(input, { ...init, cache: 'no-store' })
+      : fetch(input, {
+          ...init,
+          next: { tags: ['brease', ...tags], ...(revalidate !== undefined ? { revalidate } : {}) }
+        } as RequestInit)
 }
 
 const MAX_SKEW_MS = 5 * 60_000
