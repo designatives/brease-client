@@ -151,7 +151,7 @@ const props = imageProps(page.content.hero.image, { sizes: '(min-width: 768px) 5
 // <img src={props.src} srcSet={props.srcSet} sizes={props.sizes} />
 ```
 
-Supabase Storage URLs are rewritten to image transformation URLs; other URLs pass through unchanged (with an empty srcset).
+Brease files are served as-is from an S3 bucket, which doesn't resize images: the helpers return the URL unchanged with an empty `srcset`. For responsive images, let your framework resize them, e.g. `next/image` with the bucket's host in `images.remotePatterns`.
 
 ## Without JavaScript
 

@@ -121,21 +121,10 @@ describe('head tags', () => {
 })
 
 describe('image', () => {
-  const src = 'https://abc.supabase.co/storage/v1/object/public/site-assets/hero.jpg'
-
-  it('builds Supabase transform URLs and srcset', () => {
-    expect(imageUrl(src, { width: 640, quality: 70, resize: 'cover' })).toBe(
-      'https://abc.supabase.co/storage/v1/render/image/public/site-assets/hero.jpg?width=640&quality=70&resize=cover'
-    )
-    expect(srcset(src, { widths: [320, 640] })).toBe(
-      'https://abc.supabase.co/storage/v1/render/image/public/site-assets/hero.jpg?width=320 320w, ' +
-        'https://abc.supabase.co/storage/v1/render/image/public/site-assets/hero.jpg?width=640 640w'
-    )
-    expect(imageProps(src, { sizes: '50vw', widths: [320] }).sizes).toBe('50vw')
-  })
-
-  it('leaves other URLs alone', () => {
-    expect(imageUrl('https://cdn.test/a.png', { width: 100 })).toBe('https://cdn.test/a.png')
-    expect(srcset('https://cdn.test/a.png')).toBe('')
+  it('passes bucket URLs through, leaving resizing to the site', () => {
+    const src = 'https://bucket.fsn1.your-objectstorage.com/site_1/ast_1/hero.jpg'
+    expect(imageUrl(src, { width: 640 })).toBe(src)
+    expect(srcset(src)).toBe('')
+    expect(imageProps(src, { sizes: '50vw' })).toEqual({ src, srcSet: '', sizes: '50vw' })
   })
 })
