@@ -142,6 +142,17 @@ const html = `<head>${headTags(page.resolvedSeo, { xDefault: 'https://example.co
 
 `customHead` and `customCode` from the site's SEO settings are inserted as raw HTML (they are authored by the site's team); pass `{ includeCustom: false }` to leave them out.
 
+## Editor markers
+
+The Brease editor's Edit tool finds content through `data-brease` attributes:
+
+- `data-brease="hero.title"` on an element that renders a page content field (a path into `page.content`)
+- `data-brease="nav:footer"` on the element that wraps a navigation menu; clicking it opens that navigation's editor
+
+```tsx
+<nav data-brease="nav:footer">{footer.items.map(/* … */)}</nav>
+```
+
 ## Images
 
 ```ts
