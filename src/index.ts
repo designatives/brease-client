@@ -1,11 +1,21 @@
 import { env } from './env'
 import { BreaseError } from './errors'
-import type { Navigation, Page, PageRef, Redirect, Release, Site, SitemapEntry } from './types'
+import type { Navigation, Page, PageRef, Redirect, Release, Site, SitemapEntry, UrlSettings } from './types'
 import { resolvePath } from './urls'
 
 export { BreaseError } from './errors'
 export type * from './types'
 export { buildPath, normalizeSlug, resolvePath } from './urls'
+
+export type LocaleContext = {
+  locale: string
+  settings: UrlSettings
+  // The page's path in each locale it exists in.
+  alternates: Record<string, string>
+  // The home page's path in each locale that has one: where a locale switcher goes when the page itself has
+  // no version in that locale. Locales in neither have no content yet.
+  homes: Record<string, string>
+}
 
 export type BreaseOptions = {
   token?: string
@@ -29,6 +39,10 @@ export interface Brease {
   route(path?: string | string[]): Promise<{ slug: string; locale: string } | null>
   // That route's static params: the path segments of every published page in every locale.
   routes(): Promise<{ path: string[] }[]>
+  // What a page's client components need about locales (BreaseLocaleProvider in brease-client/react): the
+  // locale, the URL settings and the page's URL in every locale. Null where no page can live, and for a
+  // locale that has no content yet.
+  localeContext(path?: string | string[]): Promise<LocaleContext | null>
   sitemap(baseUrl: string): Promise<SitemapEntry[]>
 }
 
@@ -130,6 +144,28 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
         .filter((r) => !r.hidden && !r.slug.split('/').some((part) => part.startsWith('_')))
         .map((r) => ({ path: r.url.split('/').filter(Boolean) }))
     },
+    async localeContext(path) {
+      const target = await client.route(path)
+      if (!target) return null
+      const [site, page, home] = await Promise.all([
+        client.getSite(),
+        client.getPage(target.slug, { locale: target.locale }),
+        client.getPage('', { locale: target.locale })
+      ])
+      const settings: UrlSettings = {
+        locales: site.locales,
+        defaultLocale: site.defaultLocale,
+        localeStrategy: site.localeStrategy,
+        urlTemplate: site.urlTemplate
+      }
+      // A locale without content yet (added, not translated) is treated like no locale at all.
+      if (!page && !home) return null
+      const alternates: Record<string, string> = {}
+      for (const [locale, url] of Object.entries(page?.alternates ?? {})) alternates[locale] = pathOf(url)
+      const homes: Record<string, string> = {}
+      for (const [locale, url] of Object.entries(home?.alternates ?? {})) homes[locale] = pathOf(url)
+      return { locale: target.locale, settings, alternates, homes }
+    },
     async sitemap(baseUrl) {
       const base = baseUrl.replace(/\/+$/, '')
       const refs = (await client.getPages()).filter((r) => !r.hidden)
@@ -143,4 +179,12 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
     }
   }
   return client
+}
+
+function pathOf(url: string) {
+  try {
+    return new URL(url, 'http://localhost').pathname
+  } catch {
+    return url
+  }
 }

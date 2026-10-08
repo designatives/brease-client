@@ -176,6 +176,30 @@ describe('catch-all route', () => {
   })
 })
 
+describe('locale context', () => {
+  it('gives the locale, settings and the page’s paths in every locale', async () => {
+    const page = { alternates: { hu: 'https://example.com/rolunk', en: 'https://example.com/en/about' } }
+    const home = { alternates: { hu: 'https://example.com/', en: 'https://example.com/en' } }
+    const { fetch } = mockFetch([json(site), json(page), json(home)])
+    expect(await createBrease({ token: 't', fetch }).localeContext(['en', 'about'])).toEqual({
+      locale: 'en',
+      settings: {
+        locales: ['hu', 'en'],
+        defaultLocale: 'hu',
+        localeStrategy: 'PREFIX_EXCEPT_DEFAULT',
+        urlTemplate: null
+      },
+      alternates: { hu: '/rolunk', en: '/en/about' },
+      homes: { hu: '/', en: '/en' }
+    })
+  })
+
+  it('treats a locale without content like no locale', async () => {
+    const { fetch } = mockFetch([json(site), json({}, 404), json({}, 404)])
+    expect(await createBrease({ token: 't', fetch }).localeContext(['en'])).toBeNull()
+  })
+})
+
 describe('sitemap', () => {
   it('lists visible pages with absolute alternates', async () => {
     const pages: PageRef[] = [

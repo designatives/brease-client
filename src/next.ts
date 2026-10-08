@@ -1,4 +1,5 @@
 import { env } from './env'
+import { type Brease, createBrease } from './index'
 import type { ResolvedSeo } from './types'
 
 export type BreaseMetadata = {
@@ -150,4 +151,18 @@ export async function hmacHex(secret: string, message: string): Promise<string> 
 
 function json(status: number, data: unknown) {
   return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } })
+}
+
+// next.config's redirects(), from the redirects managed in Brease. Build goes on without them when the
+// content API can't be reached.
+export function breaseRedirects(client: Pick<Brease, 'getRedirects'> = createBrease()) {
+  return async () => {
+    try {
+      const redirects = await client.getRedirects()
+      return redirects.map((r) => ({ source: r.source, destination: r.destination, statusCode: r.status }))
+    } catch (err) {
+      console.warn(`Brease redirects unavailable: ${(err as Error).message}`)
+      return []
+    }
+  }
 }

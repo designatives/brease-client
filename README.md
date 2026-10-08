@@ -34,6 +34,7 @@ await brease.getRedirects() // [{ source, destination, status }]
 await brease.resolve('/en/about') // { slug: 'about', locale: 'en' } | null
 await brease.route(['en', 'about']) // the same from catch-all path segments; null for shared "_" pages
 await brease.routes() // [{ path: ['en', 'about'] }, …]: static params for every published page
+await brease.localeContext(['en', 'about']) // { locale, settings, alternates, homes } for BreaseLocaleProvider
 await brease.sitemap('https://example.com') // [{ url, alternates }]
 ```
 
@@ -106,31 +107,41 @@ export default {
 }
 ```
 
-### Several locales
+### Recommended structure (optional)
 
-One optional catch-all route serves every locale and page, whatever the site's URL strategy (`/about`, `/de/uber-uns`, a custom template): Brease decides which locale a path belongs to, so adding a locale later needs no code change. The root layout lives in that route too, so `<html lang>` follows the page.
+Brease works with any routing: `getPage()` and friends don't care how a site is built. This structure is what Brease recommends, and what its editor moves a site towards when the site follows Brease conventions. It makes locales a setting: adding one, or changing how URLs are prefixed, needs no code change.
 
 ```
 app/
   [[...path]]/
-    layout.tsx       ← root layout: <html lang={locale}>
-    page.tsx         ← every page in every locale
+    layout.tsx       root layout: <html lang>, BreaseLocaleProvider
+    page.tsx         every page in every locale; the page's content picks its template
     not-found.tsx
-  api/…, robots.ts, sitemap.ts, route handlers   ← unchanged; static routes win over the catch-all
+  og/[[...path]]/route.tsx      share images (image files can't sit inside an optional catch-all)
+  api/…, sitemap.ts, robots.ts, other route handlers   unchanged: static routes win over the catch-all
+brease/templates.tsx            { home: …, article: … }, the site's own page templates
 ```
 
 ```tsx
 // app/[[...path]]/layout.tsx (replaces app/layout.tsx)
+import { BreaseLocaleProvider } from 'brease-client/react'
 import { brease } from '@/lib/brease'
 
 type Props = { children: React.ReactNode; params: Promise<{ path?: string[] }> }
 
 export default async function RootLayout({ children, params }: Props) {
-  const route = await brease.route((await params).path)
-  const locale = route?.locale ?? (await brease.getSite()).defaultLocale
+  const site = await brease.getSite()
+  const context = (await brease.localeContext((await params).path)) ?? {
+    locale: site.defaultLocale,
+    settings: site,
+    alternates: {},
+    homes: {}
+  }
   return (
-    <html lang={locale}>
-      <body>{children}</body>
+    <html lang={context.locale}>
+      <body>
+        <BreaseLocaleProvider value={context}>{children}</BreaseLocaleProvider>
+      </body>
     </html>
   )
 }
@@ -140,6 +151,7 @@ export default async function RootLayout({ children, params }: Props) {
 // app/[[...path]]/page.tsx (replaces app/page.tsx and app/[slug]/page.tsx)
 import { notFound } from 'next/navigation'
 import { toMetadata } from 'brease-client/next'
+import { templates } from '@/brease/templates'
 import { brease } from '@/lib/brease'
 
 export const revalidate = 60
@@ -149,7 +161,8 @@ type Props = { params: Promise<{ path?: string[] }> }
 async function load(params: Props['params']) {
   const route = await brease.route((await params).path)
   const page = route && (await brease.getPage<Content>(route.slug, { locale: route.locale }))
-  return page && route ? { page, locale: route.locale } : null
+  const Template = page && templates[page.content.template]
+  return page && route && Template ? { page, locale: route.locale, Template } : null
 }
 
 export const generateStaticParams = () => brease.routes()
@@ -162,15 +175,29 @@ export async function generateMetadata({ params }: Props) {
 export default async function Page({ params }: Props) {
   const loaded = await load(params)
   if (!loaded) notFound()
-  // Pass `loaded.locale` to everything else that reads Brease: navigations, shared "_" pages, site SEO.
-  return <Template page={loaded.page} locale={loaded.locale} />
+  // Pass the locale to everything else that reads Brease: navigations, shared "_" pages, site SEO.
+  return <loaded.Template page={loaded.page} locale={loaded.locale} />
 }
 ```
 
-- Everything that read a fixed locale (`getPage(…, { locale: 'hu' })`, `getNavigation`, `site.seo.hu`) takes the locale from the route instead.
-- Links inside content are already locale URLs; build other internal links with `buildPath(site, slug, locale)`.
-- Per-page `opengraph-image` / `twitter-image` files move into `[[...path]]` too and load the page the same way.
+In client components:
+
+```tsx
+import { LocaleSwitcher, useLocale, useLocaleLinks } from 'brease-client/react'
+
+const { locale, href } = useLocale()
+href('') // this locale's home: '/', '/en', …
+href('about', 'de') // '/de/about'
+
+<LocaleSwitcher className="langs" linkClassName="lang" /> // unstyled links; hidden while one locale has content
+useLocaleLinks() // [{ locale, label, href, current }] for your own markup
+```
+
+- The switcher links each locale's version of the current page, else that locale's home page; locales without content yet are left out.
+- Everything that read a fixed locale (`getPage(…, { locale: 'hu' })`, `getNavigation`, `site.seo.hu`) takes it from the route instead.
+- Links inside content are already locale URLs. Build other internal links with `href()` (client) or `buildPath(site, slug, locale)` (server).
 - Text written into components (button labels, captions) stays as it is; moving it into Brease content is a separate change.
+- `next.config`: `redirects: breaseRedirects()` (from `brease-client/next`) serves the redirects managed in Brease.
 
 ### Revalidation signature
 
