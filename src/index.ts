@@ -4,6 +4,7 @@ import type { Navigation, Page, PageRef, Redirect, Release, Site, SitemapEntry, 
 import { resolvePath } from './urls'
 
 export { BreaseError } from './errors'
+export { type LocaleLink, localeHref, localeLinks, nativeName } from './locales'
 export type * from './types'
 export { buildPath, normalizeSlug, resolvePath } from './urls'
 
@@ -39,7 +40,7 @@ export interface Brease {
   route(path?: string | string[]): Promise<{ slug: string; locale: string } | null>
   // That route's static params: the path segments of every published page in every locale.
   routes(): Promise<{ path: string[] }[]>
-  // What a page's client components need about locales (BreaseLocaleProvider in brease-client/react): the
+  // What a page's locale-aware parts need (a switcher, links built in code, <html lang>): the
   // locale, the URL settings and the page's URL in every locale. Null where no page can live, and for a
   // locale that has no content yet.
   localeContext(path?: string | string[]): Promise<LocaleContext | null>

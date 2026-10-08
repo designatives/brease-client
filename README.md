@@ -114,7 +114,7 @@ Brease works with any routing: `getPage()` and friends don't care how a site is 
 ```
 app/
   [[...path]]/
-    layout.tsx       root layout: <html lang>, BreaseLocaleProvider
+    layout.tsx       root layout: <html lang>, the locale context for the page
     page.tsx         every page in every locale; the page's content picks its template
     not-found.tsx
   og/[[...path]]/route.tsx      share images (image files can't sit inside an optional catch-all)
@@ -124,8 +124,8 @@ brease/templates.tsx            { home: …, article: … }, the site's own page
 
 ```tsx
 // app/[[...path]]/layout.tsx (replaces app/layout.tsx)
-import { BreaseLocaleProvider } from 'brease-client/react'
 import { brease } from '@/lib/brease'
+import { LocaleProvider } from '@/components/locale' // the site's own React context around the value
 
 type Props = { children: React.ReactNode; params: Promise<{ path?: string[] }> }
 
@@ -140,7 +140,7 @@ export default async function RootLayout({ children, params }: Props) {
   return (
     <html lang={context.locale}>
       <body>
-        <BreaseLocaleProvider value={context}>{children}</BreaseLocaleProvider>
+        <LocaleProvider value={context}>{children}</LocaleProvider>
       </body>
     </html>
   )
@@ -180,22 +180,21 @@ export default async function Page({ params }: Props) {
 }
 ```
 
-In client components:
+The package stays framework-free: it gives the data and the logic, and the site renders them with its own framework.
 
-```tsx
-import { LocaleSwitcher, useLocale, useLocaleLinks } from 'brease-client/react'
+```ts
+import { localeHref, localeLinks } from 'brease-client'
 
-const { locale, href } = useLocale()
-href('') // this locale's home: '/', '/en', …
-href('about', 'de') // '/de/about'
-
-<LocaleSwitcher className="langs" linkClassName="lang" /> // unstyled links; hidden while one locale has content
-useLocaleLinks() // [{ locale, label, href, current }] for your own markup
+const context = await brease.localeContext(path) // { locale, settings, alternates, homes }
+localeLinks(context) // [{ locale: 'hu', label: 'Magyar', href: '/rolunk', current: true }, …]
+localeHref(context.settings, 'about', 'de') // '/de/about'
 ```
 
-- The switcher links each locale's version of the current page, else that locale's home page; locales without content yet are left out.
+A locale switcher is then a few lines in any framework: a list of `<a href={l.href} hreflang={l.locale}>{l.label}</a>`, with `aria-current` on the current one, hidden while `localeLinks()` returns fewer than two links. Share `context` with the components that need it the framework's own way (a React context, Astro props, a template variable).
+
+- `localeLinks()` links each locale's version of the current page, else that locale's home page; locales without content yet are left out.
 - Everything that read a fixed locale (`getPage(…, { locale: 'hu' })`, `getNavigation`, `site.seo.hu`) takes it from the route instead.
-- Links inside content are already locale URLs. Build other internal links with `href()` (client) or `buildPath(site, slug, locale)` (server).
+- Links inside content are already locale URLs. Build other internal links with `localeHref(settings, slug, locale)`.
 - Text written into components (button labels, captions) stays as it is; moving it into Brease content is a separate change.
 - `next.config`: `redirects: breaseRedirects()` (from `brease-client/next`) serves the redirects managed in Brease.
 
