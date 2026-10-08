@@ -24,10 +24,16 @@ export interface Brease {
   getRedirects(): Promise<Redirect[]>
   getRelease(): Promise<Release>
   resolve(pathname: string): Promise<{ slug: string; locale: string } | null>
+  // For one catch-all route serving every locale (app/[[...path]] in Next.js): the locale and slug of a
+  // request's path segments, or null when no page can live there (unknown locale, shared "_" content).
+  route(path?: string | string[]): Promise<{ slug: string; locale: string } | null>
+  // That route's static params: the path segments of every published page in every locale.
+  routes(): Promise<{ path: string[] }[]>
   sitemap(baseUrl: string): Promise<SitemapEntry[]>
 }
 
 const RETRY_AFTER_CAP_MS = 10_000
+const SITE_TTL_MS = 60_000
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export function createBrease(opts: BreaseOptions = {}): Brease {
@@ -36,7 +42,8 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
   const retries = opts.retries ?? 2
   const baseMs = opts.retryBaseMs ?? 300
   const doFetch: typeof fetch = opts.fetch ?? ((input, init) => fetch(input, init))
-  let sitePromise: Promise<Site> | undefined
+  // Re-read after a minute, so a locale added in Brease is served without a restart.
+  let site: { promise: Promise<Site>; at: number } | undefined
 
   async function request<T>(
     path: string,
@@ -83,11 +90,14 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
 
   const client: Brease = {
     getSite() {
-      sitePromise ??= request<Site>('/content-api/site').catch((err) => {
-        sitePromise = undefined
-        throw err
-      })
-      return sitePromise
+      if (!site || Date.now() - site.at > SITE_TTL_MS) {
+        const promise = request<Site>('/content-api/site').catch((err) => {
+          if (site?.promise === promise) site = undefined
+          throw err
+        })
+        site = { promise, at: Date.now() }
+      }
+      return site.promise
     },
     getPage<T>(slug: string, { locale }: { locale: string }) {
       return request<Page<T>>('/content-api/page', { slug, locale }, true)
@@ -108,6 +118,17 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
       const site = await client.getSite()
       const result = resolvePath(site, pathname)
       return site.locales.includes(result.locale) ? result : null
+    },
+    async route(path) {
+      const joined = Array.isArray(path) ? path.map((p) => decodeURIComponent(p)).join('/') : (path ?? '')
+      const result = await client.resolve(`/${joined}`)
+      return result && !result.slug.split('/').some((part) => part.startsWith('_')) ? result : null
+    },
+    async routes() {
+      const refs = await client.getPages()
+      return refs
+        .filter((r) => !r.hidden && !r.slug.split('/').some((part) => part.startsWith('_')))
+        .map((r) => ({ path: r.url.split('/').filter(Boolean) }))
     },
     async sitemap(baseUrl) {
       const base = baseUrl.replace(/\/+$/, '')

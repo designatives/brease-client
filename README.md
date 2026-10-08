@@ -32,6 +32,8 @@ await brease.getPages({ locale: 'en' }) // [{ pageId, locale, slug, url, hidden 
 await brease.getNavigation('main', { locale: 'en' }) // { key, locale, items } | null
 await brease.getRedirects() // [{ source, destination, status }]
 await brease.resolve('/en/about') // { slug: 'about', locale: 'en' } | null
+await brease.route(['en', 'about']) // the same from catch-all path segments; null for shared "_" pages
+await brease.routes() // [{ path: ['en', 'about'] }, …]: static params for every published page
 await brease.sitemap('https://example.com') // [{ url, alternates }]
 ```
 
@@ -39,6 +41,7 @@ await brease.sitemap('https://example.com') // [{ url, alternates }]
 - 429 and 5xx responses (and network errors) are retried twice with backoff; `Retry-After` is honoured.
 - Commit pinning: the `x-brease-commit` header is sent from `VERCEL_GIT_COMMIT_SHA`, so every deployment reads the content release that was built and tested with its code.
 - `sitemap()` has no `lastModified`: releases are immutable snapshots and do not track per-page edit times.
+- `getSite()` is cached for a minute, so a locale added in Brease is served without a restart.
 - `buildPath(settings, slug, locale)` and `resolvePath(settings, pathname)` are exported for routing code that already has the site settings.
 
 ## Next.js (App Router)
@@ -102,6 +105,72 @@ export default {
   }
 }
 ```
+
+### Several locales
+
+One optional catch-all route serves every locale and page, whatever the site's URL strategy (`/about`, `/de/uber-uns`, a custom template): Brease decides which locale a path belongs to, so adding a locale later needs no code change. The root layout lives in that route too, so `<html lang>` follows the page.
+
+```
+app/
+  [[...path]]/
+    layout.tsx       ← root layout: <html lang={locale}>
+    page.tsx         ← every page in every locale
+    not-found.tsx
+  api/…, robots.ts, sitemap.ts, route handlers   ← unchanged; static routes win over the catch-all
+```
+
+```tsx
+// app/[[...path]]/layout.tsx (replaces app/layout.tsx)
+import { brease } from '@/lib/brease'
+
+type Props = { children: React.ReactNode; params: Promise<{ path?: string[] }> }
+
+export default async function RootLayout({ children, params }: Props) {
+  const route = await brease.route((await params).path)
+  const locale = route?.locale ?? (await brease.getSite()).defaultLocale
+  return (
+    <html lang={locale}>
+      <body>{children}</body>
+    </html>
+  )
+}
+```
+
+```tsx
+// app/[[...path]]/page.tsx (replaces app/page.tsx and app/[slug]/page.tsx)
+import { notFound } from 'next/navigation'
+import { toMetadata } from 'brease-client/next'
+import { brease } from '@/lib/brease'
+
+export const revalidate = 60
+
+type Props = { params: Promise<{ path?: string[] }> }
+
+async function load(params: Props['params']) {
+  const route = await brease.route((await params).path)
+  const page = route && (await brease.getPage<Content>(route.slug, { locale: route.locale }))
+  return page && route ? { page, locale: route.locale } : null
+}
+
+export const generateStaticParams = () => brease.routes()
+
+export async function generateMetadata({ params }: Props) {
+  const loaded = await load(params)
+  return loaded ? toMetadata(loaded.page.resolvedSeo) : {}
+}
+
+export default async function Page({ params }: Props) {
+  const loaded = await load(params)
+  if (!loaded) notFound()
+  // Pass `loaded.locale` to everything else that reads Brease: navigations, shared "_" pages, site SEO.
+  return <Template page={loaded.page} locale={loaded.locale} />
+}
+```
+
+- Everything that read a fixed locale (`getPage(…, { locale: 'hu' })`, `getNavigation`, `site.seo.hu`) takes the locale from the route instead.
+- Links inside content are already locale URLs; build other internal links with `buildPath(site, slug, locale)`.
+- Per-page `opengraph-image` / `twitter-image` files move into `[[...path]]` too and load the page the same way.
+- Text written into components (button labels, captions) stays as it is; moving it into Brease content is a separate change.
 
 ### Revalidation signature
 

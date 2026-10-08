@@ -137,6 +137,45 @@ describe('resolve', () => {
   })
 })
 
+describe('catch-all route', () => {
+  it('maps path segments to a locale and slug, refusing shared content', async () => {
+    const { fetch } = mockFetch([json(site)])
+    const b = createBrease({ token: 't', fetch })
+    expect(await b.route(undefined)).toEqual({ slug: '', locale: 'hu' })
+    expect(await b.route(['en'])).toEqual({ slug: '', locale: 'en' })
+    expect(await b.route(['en', 'a%20b', 'c'])).toEqual({ slug: 'a b/c', locale: 'en' })
+    expect(await b.route(['rolunk'])).toEqual({ slug: 'rolunk', locale: 'hu' })
+    expect(await b.route(['_global'])).toBeNull()
+  })
+
+  it('lists the static params of every published, routed page', async () => {
+    const pages: PageRef[] = [
+      { pageId: 'pg_home', locale: 'hu', slug: '', url: '/', hidden: false },
+      { pageId: 'pg_home', locale: 'en', slug: '', url: '/en', hidden: false },
+      { pageId: 'pg_about', locale: 'en', slug: 'about/team', url: '/en/about/team', hidden: false },
+      { pageId: 'pg_draft', locale: 'hu', slug: 'piszkozat', url: '/piszkozat', hidden: true },
+      { pageId: 'pg_global', locale: 'hu', slug: '_global', url: '/_global', hidden: false }
+    ]
+    const { fetch } = mockFetch([json(pages)])
+    expect(await createBrease({ token: 't', fetch }).routes()).toEqual([
+      { path: [] },
+      { path: ['en'] },
+      { path: ['en', 'about', 'team'] }
+    ])
+  })
+
+  it('reads the site again after a minute', async () => {
+    const { fetch, calls } = mockFetch([json(site), json({ ...site, locales: ['hu', 'en', 'de'] })])
+    const b = createBrease({ token: 't', fetch })
+    const now = Date.now()
+    await b.getSite()
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(now + 61_000)
+    expect((await b.getSite()).locales).toEqual(['hu', 'en', 'de'])
+    spy.mockRestore()
+    expect(calls).toHaveLength(2)
+  })
+})
+
 describe('sitemap', () => {
   it('lists visible pages with absolute alternates', async () => {
     const pages: PageRef[] = [

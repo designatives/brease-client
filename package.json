@@ -1,6 +1,6 @@
 {
   "name": "brease-client",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Brease delivery API client for Next.js, Astro and any fetch-capable runtime",
   "license": "MIT",
   "repository": {
