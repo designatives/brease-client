@@ -3,6 +3,7 @@ import { breaseHead } from './astro'
 import { headTagList, headTags } from './html'
 import { imageProps, imageUrl, srcset } from './image'
 import { hmacHex, revalidateHandler, toMetadata } from './next'
+import { checkSections, sectionAttrs } from './sections'
 import type { ResolvedSeo } from './types'
 
 const cache = vi.hoisted(() => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn() }))
@@ -126,5 +127,43 @@ describe('image', () => {
     expect(imageUrl(src, { width: 640 })).toBe(src)
     expect(srcset(src)).toBe('')
     expect(imageProps(src, { sizes: '50vw' })).toEqual({ src, srcSet: '', sizes: '50vw' })
+  })
+})
+
+describe('sections', () => {
+  it('gives the section markers', () => {
+    expect(sectionAttrs({ id: 'sec_1', type: 'hero' })).toEqual({
+      'data-brease-section': 'sec_1',
+      'data-brease-block': 'hero'
+    })
+  })
+
+  it('warns about the folder, the map and the content', () => {
+    const files = {
+      'src/brease/sections/index.tsx': 'export const map = { hero: Hero } // <div {...sectionAttrs(s)}>',
+      'src/brease/sections/hero/section.json': '{"name":"Hero","fields":{"type":"object"}}',
+      'src/brease/sections/faq/section.json': '{"fields":{}}',
+      'src/brease/sections/Bad/x.tsx': ''
+    }
+    const pages = {
+      pg_home: {
+        en: {
+          content: {
+            sections: [
+              { id: 'a', type: 'hero' },
+              { id: 'b', type: 'gone' }
+            ]
+          }
+        },
+        de: { content: { sections: [{ id: 'a', type: 'hero' }] } }
+      }
+    }
+    expect(checkSections(files, pages)).toEqual([
+      'src/brease/sections/faq/section.json has no name',
+      'faq is in src/brease/sections but not in its map file',
+      'src/brease/sections/Bad: use lowercase letters, numbers and - in section folder names',
+      'pg_home (en): section type "gone" has no folder',
+      'pg_home: the sections in de differ from the other locales'
+    ])
   })
 })

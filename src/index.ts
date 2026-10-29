@@ -5,6 +5,7 @@ import { resolvePath } from './urls'
 
 export { BreaseError } from './errors'
 export { type LocaleLink, localeHref, localeLinks, nativeName } from './locales'
+export { type BreaseSection, checkSections, sectionAttrs, sectionsAttrs } from './sections'
 export type * from './types'
 export { buildPath, normalizeSlug, resolvePath } from './urls'
 

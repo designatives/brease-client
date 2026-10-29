@@ -243,10 +243,45 @@ The Brease editor's Edit tool finds content through `data-brease` attributes:
 
 - `data-brease="hero.title"` on an element that renders a page content field (a path into `page.content`)
 - `data-brease="nav:footer"` on the element that wraps a navigation menu; clicking it opens that navigation's editor
+- `data-brease-block="<name>"` on a section's root: which component renders it (a hint for the AI)
+- `data-brease-sections="sections"` and `data-brease-section="<id>"`: the section list and its sections (see Sections)
 
 ```tsx
 <nav data-brease="nav:footer">{footer.items.map(/* … */)}</nav>
 ```
+
+## Sections
+
+Editors can add, move, duplicate and delete page sections in the Brease editor when a site follows the sections convention:
+
+```
+src/brease/sections/          (or brease/sections/)
+  index.tsx                   type -> component map, renders content.sections in order; unknown types render nothing
+  testimonials/
+    section.json              { "name": "Testimonials", "description": "…", "addable": true, "fields": { JSON Schema } }
+    Testimonials.tsx
+```
+
+- A page's sections are one list, `content.sections: [{ id, type, ...fields }]`, with the same ids in the same order in every locale. Fixed parts (a page title, header, footer, site-wide content) stay outside it.
+- `fields` describes the section's fields; Brease builds new sections from it (lorem ipsum, a placeholder image, `default`s, `enum`s' first values, `minItems` list items). Images are `{ assetId, url, alt }`, links `{ label, href }`, rich text `{ "type": "string", "format": "html" }`.
+- Markers: the list's element carries `data-brease-sections="sections"`, each section's root `data-brease-section={id}` and `data-brease-block={type}`, fields inside `data-brease="sections.<index>.<field>"`.
+
+```tsx
+import { type BreaseSection, sectionAttrs, sectionsAttrs } from 'brease-client'
+
+export function Sections({ sections }: { sections: BreaseSection[] }) {
+  return (
+    <div {...sectionsAttrs}>
+      {sections.map((s, i) => {
+        const Component = map[s.type]
+        return Component ? <div key={s.id} {...sectionAttrs(s)}><Component section={s} index={i} /></div> : null
+      })}
+    </div>
+  )
+}
+```
+
+`npx brease-client check` warns about folders without a valid `section.json`, types missing from the map file, a missing `data-brease-section`, unknown types in `brease-seed/` or `.brease/` content, and locales whose sections differ. Brease runs the same check before publishing.
 
 ## Images
 

@@ -82,5 +82,8 @@
   "publishConfig": {
     "access": "public",
     "provenance": true
+  },
+  "bin": {
+    "brease-client": "./dist/cli.js"
   }
 }
