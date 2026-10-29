@@ -22,8 +22,10 @@ function pagesIn(root: string) {
   for (const pageId of readdirSync(dir)) {
     for (const file of readdirSync(join(dir, pageId))) {
       if (!file.endsWith('.json') || file === 'page.json') continue
+      const locales = pages[pageId] ?? {}
+      pages[pageId] = locales
       try {
-        ;(pages[pageId] ??= {})[file.slice(0, -5)] = JSON.parse(readFileSync(join(dir, pageId, file), 'utf8'))
+        locales[file.slice(0, -5)] = JSON.parse(readFileSync(join(dir, pageId, file), 'utf8'))
       } catch {}
     }
   }
