@@ -264,6 +264,7 @@ src/brease/sections/          (or brease/sections/)
 
 - A page's sections are one list, `content.sections: [{ id, type, ...fields }]`, with the same ids in the same order in every locale. Fixed parts (a page title, header, footer, site-wide content) stay outside it.
 - `fields` describes the section's fields; Brease builds new sections from it (lorem ipsum, a placeholder image, `default`s, `enum`s' first values, `minItems` list items). Images are `{ assetId, url, alt }`, links `{ label, href }`, rich text `{ "type": "string", "format": "html" }`.
+- `"shared": true` keeps one content for every page that shows the type, on the site-wide page (`_global`) under `content.shared.<type>`; pages list only `{ id, type }` for it, and its markers use the other-page prefix (`<_global pageId>:shared.<type>.<field>`).
 - Markers: the list's element carries `data-brease-sections="sections"`, each section's root `data-brease-section={id}` and `data-brease-block={type}`, fields inside `data-brease="sections.<index>.<field>"`.
 
 ```tsx
