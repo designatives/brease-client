@@ -3,6 +3,7 @@ import { BreaseError } from './errors'
 import type { Navigation, Page, PageRef, Redirect, Release, Site, SitemapEntry, UrlSettings } from './types'
 import { resolvePath } from './urls'
 
+export { type Ga4Tag, ga4Html, ga4Tag, grantAnalytics } from './analytics'
 export { BreaseError } from './errors'
 export { type LocaleLink, localeHref, localeLinks, nativeName } from './locales'
 export { type BreaseSection, checkSections, sectionAttrs, sectionsAttrs } from './sections'

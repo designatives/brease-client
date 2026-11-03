@@ -60,6 +60,8 @@ export type Site = {
   localeStrategy: LocaleStrategy
   urlTemplate: string | null
   seo: Record<string, SiteSeo>
+  // The GA4 tag to render with ga4Tag(); absent from servers before it existed.
+  analytics?: { ga4: string } | null
 }
 
 export type Page<T = Record<string, unknown>> = {

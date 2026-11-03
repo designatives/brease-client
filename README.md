@@ -107,6 +107,39 @@ export default {
 }
 ```
 
+### Google Analytics (GA4)
+
+When GA4 is linked in Brease (Connections → Google) with "Add the tag to the site" on, the site response carries
+its measurement id. Render it once in the root layout; turning it off in Brease removes it without a deploy.
+
+```tsx
+// app/layout.tsx
+import Script from 'next/script'
+import { ga4Tag } from 'brease-client'
+import { brease } from '@/lib/brease'
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const ga = ga4Tag(await brease.getSite())
+  return (
+    <html>
+      <body>
+        {children}
+        {ga && (
+          <>
+            <Script src={ga.src} strategy="afterInteractive" />
+            <Script id="brease-ga4" strategy="afterInteractive">{ga.inline}</Script>
+          </>
+        )}
+      </body>
+    </html>
+  )
+}
+```
+
+Consent mode starts denied: nothing is stored until your cookie banner calls `grantAnalytics()` (and
+`grantAnalytics(false)` when consent is withdrawn). Without a banner, GA4 only receives cookieless pings. For
+Astro or plain HTML, put `ga4Html(site)` in the `<head>`.
+
 ### Recommended structure (optional)
 
 Brease works with any routing: `getPage()` and friends don't care how a site is built. This structure is what Brease recommends, and what its editor moves a site towards when the site follows Brease conventions. It makes locales a setting: adding one, or changing how URLs are prefixed, needs no code change.

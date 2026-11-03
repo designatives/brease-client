@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ga4Html, ga4Tag, grantAnalytics } from './analytics'
 import { breaseHead } from './astro'
 import { headTagList, headTags } from './html'
 import { imageProps, imageUrl, srcset } from './image'
@@ -165,5 +166,30 @@ describe('sections', () => {
       'pg_home (en): section type "gone" has no folder',
       'pg_home: the sections in de differ from the other locales'
     ])
+  })
+})
+
+describe('ga4 tag', () => {
+  it('renders nothing when the tag is off or invalid', () => {
+    expect(ga4Tag({ analytics: null })).toBeNull()
+    expect(ga4Tag({})).toBeNull()
+    expect(ga4Tag({ analytics: { ga4: "G-1');alert(1)//" } })).toBeNull()
+    expect(ga4Html({ analytics: null })).toBe('')
+  })
+
+  it('starts with consent denied and configures the measurement id', () => {
+    const tag = ga4Tag({ analytics: { ga4: 'G-ABC123' } })
+    expect(tag?.src).toBe('https://www.googletagmanager.com/gtag/js?id=G-ABC123')
+    expect(tag?.inline).toContain("analytics_storage:'denied'")
+    expect(tag?.inline).toContain("gtag('config','G-ABC123')")
+    expect(ga4Html({ analytics: { ga4: 'G-ABC123' } })).toContain('<script async src=')
+  })
+
+  it('updates consent through gtag', () => {
+    const gtag = vi.fn()
+    ;(globalThis as { gtag?: unknown }).gtag = gtag
+    grantAnalytics()
+    expect(gtag).toHaveBeenCalledWith('consent', 'update', { analytics_storage: 'granted' })
+    delete (globalThis as { gtag?: unknown }).gtag
   })
 })
