@@ -5,6 +5,7 @@ import { headTagList, headTags } from './html'
 import { imageProps, imageUrl, srcset } from './image'
 import { hmacHex, revalidateHandler, toMetadata } from './next'
 import { checkSections, sectionAttrs } from './sections'
+import { jsonLd, jsonLdHtml } from './structured-data'
 import type { ResolvedSeo } from './types'
 
 const cache = vi.hoisted(() => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn() }))
@@ -191,5 +192,20 @@ describe('ga4 tag', () => {
     grantAnalytics()
     expect(gtag).toHaveBeenCalledWith('consent', 'update', { analytics_storage: 'granted' })
     delete (globalThis as { gtag?: unknown }).gtag
+  })
+})
+
+describe('jsonLd', () => {
+  it('returns each item with escaped JSON', () => {
+    const [item] = jsonLd(seo)
+    expect(item?.data).toEqual(seo.structuredData[0])
+    expect(item?.json).not.toContain('</script>')
+    expect(JSON.parse(item?.json ?? '')).toEqual(seo.structuredData[0])
+    expect(jsonLd({ structuredData: [] })).toEqual([])
+  })
+
+  it('renders script tags for HTML pages', () => {
+    expect(jsonLdHtml(seo)).toMatch(/^<script type="application\/ld\+json">\{"@type":"Organization"/)
+    expect(jsonLdHtml({ structuredData: [] })).toBe('')
   })
 })

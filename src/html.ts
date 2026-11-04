@@ -1,3 +1,4 @@
+import { jsonLd } from './structured-data'
 import type { ResolvedSeo } from './types'
 
 export type HeadOptions = {
@@ -45,12 +46,8 @@ export function headTagList(seo: ResolvedSeo, opts: HeadOptions = {}): HeadTag[]
   meta('name', 'twitter:description', tw.description)
   meta('name', 'twitter:image', tw.image)
   if (seo.favicon) tags.push({ tag: 'link', attrs: { rel: 'icon', href: seo.favicon } })
-  for (const data of seo.structuredData) {
-    tags.push({
-      tag: 'script',
-      attrs: { type: 'application/ld+json' },
-      content: JSON.stringify(data).replace(/</g, '\\u003c')
-    })
+  for (const item of jsonLd(seo)) {
+    tags.push({ tag: 'script', attrs: { type: 'application/ld+json' }, content: item.json })
   }
   return tags
 }

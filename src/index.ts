@@ -7,6 +7,7 @@ export { type Ga4Tag, ga4Html, ga4Tag, grantAnalytics } from './analytics'
 export { BreaseError } from './errors'
 export { type LocaleLink, localeHref, localeLinks, nativeName } from './locales'
 export { type BreaseSection, checkSections, sectionAttrs, sectionsAttrs } from './sections'
+export { type JsonLd, jsonLd, jsonLdHtml } from './structured-data'
 export type * from './types'
 export { buildPath, normalizeSlug, resolvePath } from './urls'
 

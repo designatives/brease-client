@@ -107,6 +107,21 @@ export default {
 }
 ```
 
+### Structured data (JSON-LD)
+
+`toMetadata` can't output scripts, so render the page's structured data with `jsonLd` (framework-free, from the
+root export). Each item's `json` is escaped for use inside a script tag.
+
+```tsx
+import { jsonLd } from 'brease-client'
+
+{jsonLd(page.resolvedSeo).map((item, i) => (
+  <script key={i} type="application/ld+json" dangerouslySetInnerHTML={{ __html: item.json }} />
+))}
+```
+
+`headTags` (HTML) and `breaseHead` (Astro) already include it; `jsonLdHtml(seo)` gives only the scripts.
+
 ### Google Analytics (GA4)
 
 When GA4 is linked in Brease (Connections → Google) with "Add the tag to the site" on, the site response carries
