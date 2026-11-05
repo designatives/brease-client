@@ -11,6 +11,7 @@ import { checkSections, sectionAttrs } from './sections'
 import { verifyRevalidate } from './signature'
 import { jsonLd, jsonLdHtml } from './structured-data'
 import type { ResolvedSeo } from './types'
+import { canonicalPath } from './urls'
 
 const cache = vi.hoisted(() => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn() }))
 vi.mock('next/cache', () => cache)
@@ -289,5 +290,20 @@ describe('image fields', () => {
       width: 800,
       height: 600
     })
+  })
+})
+
+describe('canonicalPath', () => {
+  const settings = {
+    locales: ['en', 'hu'],
+    defaultLocale: 'en',
+    localeStrategy: 'PREFIX_EXCEPT_DEFAULT' as const,
+    urlTemplate: null
+  }
+  it('names the canonical form of a duplicate path, null for the canonical one', () => {
+    expect(canonicalPath(settings, '/en/about')).toBe('/about')
+    expect(canonicalPath(settings, '/about/')).toBeNull()
+    expect(canonicalPath(settings, '/hu/rolunk?x=1')).toBeNull()
+    expect(canonicalPath({ ...settings, localeStrategy: 'PREFIX_ALL' }, '/about')).toBe('/en/about')
   })
 })

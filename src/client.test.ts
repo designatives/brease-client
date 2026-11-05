@@ -37,14 +37,14 @@ describe('createBrease', () => {
     const { fetch, calls } = mockFetch([json(site), json([]), json({}), json({}), json([]), json({})])
     const b = createBrease({ token: 'brs_live_x', apiUrl: 'https://api.test/', commit: 'abc123', fetch })
     await b.getSite()
-    await b.getPages({ locale: 'en' })
+    await b.getPages({ locale: 'en', parentId: 'pg_news', withContent: true })
     await b.getPage('about', { locale: 'en' })
     await b.getNavigation('main', { locale: 'hu' })
     await b.getRedirects()
     await b.getRelease()
     expect(calls.map((c) => c.url)).toEqual([
       'https://api.test/content-api/site',
-      'https://api.test/content-api/pages?locale=en',
+      'https://api.test/content-api/pages?locale=en&parentId=pg_news&withContent=1',
       'https://api.test/content-api/page?slug=about&locale=en',
       'https://api.test/content-api/navigations/main?locale=hu',
       'https://api.test/content-api/redirects',

@@ -28,7 +28,8 @@ const brease = createBrease({
 
 await brease.getSite() // name, url (the public address), locales, defaultLocale, localeStrategy, global SEO, analytics
 await brease.getPage<Home>('', { locale: 'en' }) // Page<Home> | null ('' is the home page)
-await brease.getPages({ locale: 'en' }) // [{ pageId, locale, slug, url, hidden, name, index, parentId, order }]
+await brease.getPages({ locale: 'en' }) // [{ pageId, locale, slug, url, hidden, name, index, parentId, order, template }]
+await brease.getPages({ locale: 'en', parentId: news.pageId, withContent: true }) // a news list, with each page's content
 await brease.getNavigation('main', { locale: 'en' }) // { key, locale, items } | null
 await brease.getRedirects() // [{ source, destination, status }], cached for a minute
 await brease.resolve('/en/about') // { slug: 'about', locale: 'en' } | null
@@ -42,6 +43,9 @@ await brease.sitemap(site.url) // [{ url, alternates }]: pages search may show
 - 429 and 5xx responses (and network errors) are retried twice with backoff; `Retry-After` is honoured.
 - Commit pinning: the `x-brease-commit` header is sent from `VERCEL_GIT_COMMIT_SHA`, so every deployment reads the content release that was built and tested with its code.
 - `sitemap()` lists only pages search may show: not hidden, not kept out of search (`index: false`, the page's "Show in search results" switch), and no site-wide `_` pages. It has no `lastModified`: releases are immutable snapshots and do not track per-page edit times.
+- `getPages({ parentId, template, withContent })` narrows the list to a page's children or one template, and with
+  `withContent` adds each page's content (one locale, hidden pages left out, up to 100 pages): build news, team or
+  job lists from it instead of fetching every page.
 - `site.url` is the site's public address (its primary domain), the one Brease uses in canonical URLs and hreflang; use it for the sitemap and `metadataBase` rather than an env variable of your own.
 - `getSite()` is cached for a minute, so a locale added in Brease is served without a restart.
 - `buildPath(settings, slug, locale)` and `resolvePath(settings, pathname)` are exported for routing code that already has the site settings.
@@ -121,6 +125,19 @@ export const config = { matcher: ['/((?!_next|api|.*\\..*).*)'] }
 
 Sources may use parameters as in Next's redirects (`/blog/:slug`, `/docs/:rest*`). `breaseRedirects()` (from
 `brease-client/next`, for `next.config`) still works, but only reads redirects at build time.
+
+`route()` also resolves other forms of a page's URL (`/en/about` where English has no prefix, `/about` where every
+locale is prefixed); `resolvedSeo.canonical` points search engines at the real one. To redirect those forms too,
+add this to the same proxy, before `NextResponse.next()`:
+
+```ts
+import { canonicalPath } from 'brease-client'
+
+const site = await brease.getSite()
+const canonical = canonicalPath(site, req.nextUrl.pathname)
+if (canonical && (await brease.getPages()).some((p) => p.url === canonical))
+  return NextResponse.redirect(new URL(canonical + req.nextUrl.search, req.url), 308)
+```
 
 ### Structured data (JSON-LD)
 

@@ -45,3 +45,13 @@ export function resolvePath(settings: UrlSettings, pathname: string): { slug: st
   }
   return { slug: clean, locale: settings.defaultLocale }
 }
+
+// The one URL a path's page lives at, when `pathname` is another form of it (/en/about where English is the
+// unprefixed default, /about where every locale is prefixed); null when it already is the canonical form.
+export function canonicalPath(settings: UrlSettings, pathname: string): string | null {
+  const path = pathname.split(/[?#]/)[0] ?? ''
+  const { slug, locale } = resolvePath(settings, path)
+  const canonical = buildPath(settings, slug, locale)
+  const trim = (p: string) => (p.length > 1 ? p.replace(/\/+$/, '') : p)
+  return trim(decodeURIComponent(path)) === trim(canonical) ? null : canonical
+}

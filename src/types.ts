@@ -97,13 +97,20 @@ export type Page<T = Record<string, unknown>> = {
 }
 
 // The extra fields are absent from servers before they existed.
-export type PageRef = Pick<Page, 'pageId' | 'locale' | 'slug' | 'url' | 'hidden'> & {
+export type PageRef<T = Record<string, unknown>> = Pick<
+  Page,
+  'pageId' | 'locale' | 'slug' | 'url' | 'hidden'
+> & {
   name?: string
   // false when the page is kept out of search (noindex): left out of sitemap().
   index?: boolean
   // The page tree as arranged in Brease.
   parentId?: string | null
   order?: number
+  // content.template, on sites whose pages name one.
+  template?: string | null
+  // With getPages({ withContent: true }).
+  content?: T
 }
 
 export type NavigationItem = {
