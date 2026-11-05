@@ -43,12 +43,12 @@ export type BreaseOptions = {
 export interface Brease {
   getSite(): Promise<Site>
   getPage<T = Record<string, unknown>>(slug: string, opts: { locale: string }): Promise<Page<T> | null>
-  getPages(opts?: {
+  getPages<T = Record<string, unknown>>(opts?: {
     locale?: string
     parentId?: string
     template?: string
     withContent?: boolean
-  }): Promise<PageRef[]>
+  }): Promise<PageRef<T>[]>
   getNavigation(key: string, opts: { locale: string }): Promise<Navigation | null>
   getRedirects(): Promise<Redirect[]>
   getRelease(): Promise<Release>
@@ -136,8 +136,8 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
     getPage<T>(slug: string, { locale }: { locale: string }) {
       return request<Page<T>>('/content-api/page', { slug, locale }, true)
     },
-    getPages(o = {}) {
-      return request<PageRef[]>('/content-api/pages', {
+    getPages<T>(o: Parameters<Brease['getPages']>[0] = {}) {
+      return request<PageRef<T>[]>('/content-api/pages', {
         locale: o.locale,
         parentId: o.parentId,
         template: o.template,

@@ -128,15 +128,17 @@ Sources may use parameters as in Next's redirects (`/blog/:slug`, `/docs/:rest*`
 
 `route()` also resolves other forms of a page's URL (`/en/about` where English has no prefix, `/about` where every
 locale is prefixed); `resolvedSeo.canonical` points search engines at the real one. To redirect those forms too,
-add this to the same proxy, before `NextResponse.next()`:
+add this to the same proxy, before `NextResponse.next()`. Keep it in the `try`: when Brease can't be reached, the
+request goes on to the page instead of failing.
 
 ```ts
 import { canonicalPath } from 'brease-client'
 
-const site = await brease.getSite()
-const canonical = canonicalPath(site, req.nextUrl.pathname)
-if (canonical && (await brease.getPages()).some((p) => p.url === canonical))
-  return NextResponse.redirect(new URL(canonical + req.nextUrl.search, req.url), 308)
+try {
+  const canonical = canonicalPath(await brease.getSite(), req.nextUrl.pathname)
+  if (canonical && (await brease.getPages()).some((p) => p.url === canonical))
+    return NextResponse.redirect(new URL(canonical + req.nextUrl.search, req.url), 308)
+} catch {}
 ```
 
 ### Structured data (JSON-LD)
