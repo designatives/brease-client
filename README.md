@@ -88,6 +88,10 @@ export default async function Page({ params }: Props) {
 }
 ```
 
+`page.resolvedSeo` is final: the title already has the site's title template applied (unless the page chose to show
+its title as written), and every field falls back to the site's defaults. Render it as is; don't add your own
+template or a home-page exception in code.
+
 ```ts
 // app/api/brease/revalidate/route.ts: the path Brease calls after a content release
 import { revalidateHandler } from 'brease-client/next'

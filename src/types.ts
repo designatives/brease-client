@@ -22,6 +22,8 @@ export type Twitter = {
 
 export type PageSeo = {
   title?: string
+  // false: the title is shown as written, without the site's title template.
+  useTitleTemplate?: boolean
   description?: string
   canonical?: string
   robots?: Robots
@@ -31,12 +33,19 @@ export type PageSeo = {
   customCode?: string
 }
 
-export type SiteSeo = PageSeo & {
+// The site defaults pages fall back to (resolvedSeo is already resolved; these are the raw settings).
+export type SiteSeo = {
   titleTemplate?: string
   siteName?: string
+  description?: string
   defaultImage?: string
   favicon?: string
+  robots?: Robots
+  openGraph?: Pick<OpenGraph, 'type' | 'image'>
+  twitter?: Pick<Twitter, 'card' | 'site' | 'creator'>
+  structuredData?: Record<string, unknown>[]
   customHead?: string
+  customCode?: string
 }
 
 export type ResolvedSeo = {
