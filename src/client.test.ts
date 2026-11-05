@@ -164,6 +164,20 @@ describe('catch-all route', () => {
     ])
   })
 
+  it('lists only pages search may show in the sitemap', async () => {
+    const pages: PageRef[] = [
+      { pageId: 'pg_home', locale: 'hu', slug: '', url: '/', hidden: false },
+      { pageId: 'pg_home', locale: 'en', slug: '', url: '/en', hidden: false },
+      { pageId: 'pg_noindex', locale: 'hu', slug: 'rejtett', url: '/rejtett', hidden: false, index: false },
+      { pageId: 'pg_draft', locale: 'hu', slug: 'piszkozat', url: '/piszkozat', hidden: true },
+      { pageId: 'pg_global', locale: 'hu', slug: '_global', url: '/_global', hidden: false }
+    ]
+    const { fetch } = mockFetch([json(pages)])
+    const entries = await createBrease({ token: 't', fetch }).sitemap('https://example.com/')
+    expect(entries.map((e) => e.url)).toEqual(['https://example.com/', 'https://example.com/en'])
+    expect(entries[0]?.alternates).toEqual({ hu: 'https://example.com/', en: 'https://example.com/en' })
+  })
+
   it('reads the site again after a minute', async () => {
     const { fetch, calls } = mockFetch([json(site), json({ ...site, locales: ['hu', 'en', 'de'] })])
     const b = createBrease({ token: 't', fetch })

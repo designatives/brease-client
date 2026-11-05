@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ga4Html, ga4Tag, grantAnalytics } from './analytics'
 import { breaseHead } from './astro'
+import { customTags } from './custom-code'
 import { headTagList, headTags } from './html'
 import { imageProps, imageUrl, srcset } from './image'
+import { fieldPath, navPath } from './markers'
 import { hmacHex, revalidateHandler, toMetadata } from './next'
+import { matchRedirect } from './redirects'
 import { checkSections, sectionAttrs } from './sections'
+import { verifyRevalidate } from './signature'
 import { jsonLd, jsonLdHtml } from './structured-data'
 import type { ResolvedSeo } from './types'
 
@@ -207,5 +211,83 @@ describe('jsonLd', () => {
   it('renders script tags for HTML pages', () => {
     expect(jsonLdHtml(seo)).toMatch(/^<script type="application\/ld\+json">\{"@type":"Organization"/)
     expect(jsonLdHtml({ structuredData: [] })).toBe('')
+  })
+})
+
+describe('redirects per request', () => {
+  const redirects = [
+    { source: '/old', destination: '/new', status: 301 as const },
+    { source: '/blog/:slug', destination: '/news/:slug', status: 308 as const },
+    { source: '/docs/:rest*', destination: 'https://docs.example.com/:rest', status: 302 as const },
+    { source: '/loop', destination: '/loop', status: 301 as const }
+  ]
+  it('matches exact paths, parameters and the rest of a path', () => {
+    expect(matchRedirect(redirects, '/old/')).toEqual({ destination: '/new', status: 301 })
+    expect(matchRedirect(redirects, '/blog/hello')).toEqual({ destination: '/news/hello', status: 308 })
+    expect(matchRedirect(redirects, '/docs/a/b')).toEqual({
+      destination: 'https://docs.example.com/a/b',
+      status: 302
+    })
+    expect(matchRedirect(redirects, '/blog/a/b')).toBeNull()
+    expect(matchRedirect(redirects, '/loop')).toBeNull()
+    expect(matchRedirect(redirects, '/elsewhere')).toBeNull()
+  })
+})
+
+describe('editor markers', () => {
+  it('prefix fields of another page with its id, and menus with nav:', () => {
+    expect(fieldPath('hero.title')).toBe('hero.title')
+    expect(fieldPath('footer.copyright', 'pg_01abc')).toBe('pg_01abc:footer.copyright')
+    expect(navPath('main')).toBe('nav:main')
+  })
+})
+
+describe('custom code', () => {
+  it('becomes tags a framework renders as real elements', () => {
+    const tags = customTags({
+      customHead: '<meta name="x" content="1"><script src="https://a.example/t.js" async></script>',
+      customCode: '<style>.a{}</style><div>ignored</div><script>window.ok = 1</script>'
+    })
+    expect(tags).toEqual([
+      { tag: 'meta', attrs: { name: 'x', content: '1' } },
+      { tag: 'script', attrs: { src: 'https://a.example/t.js', async: '' } },
+      { tag: 'style', attrs: {}, content: '.a{}' },
+      { tag: 'script', attrs: {}, content: 'window.ok = 1' }
+    ])
+    expect(customTags({})).toEqual([])
+  })
+})
+
+describe('refresh requests in any framework', () => {
+  it('verifies the signature and lists what to refresh', async () => {
+    const key = 'secret'
+    const body = JSON.stringify({ urls: ['https://site.example/en/about'], tags: ['site:1'] })
+    const ts = String(Date.now())
+    const req = (signature: string) => ({
+      text: async () => body,
+      headers: {
+        get: (n: string) => (n === 'x-brease-timestamp' ? ts : n === 'x-brease-signature' ? signature : null)
+      }
+    })
+    expect(await verifyRevalidate(req(await hmacHex(key, `${ts}.${body}`)), key)).toMatchObject({
+      paths: ['/en/about'],
+      tags: ['brease', 'site:1']
+    })
+    expect(await verifyRevalidate(req('bad'), key)).toEqual({ ok: false, reason: 'signature' })
+  })
+})
+
+describe('image fields', () => {
+  it('take the url, alt text and size from an image object', () => {
+    expect(
+      imageProps({ assetId: 'ast_1', url: 'https://cdn.example/a.jpg', alt: 'A', width: 800, height: 600 })
+    ).toEqual({
+      src: 'https://cdn.example/a.jpg',
+      srcSet: '',
+      sizes: '100vw',
+      alt: 'A',
+      width: 800,
+      height: 600
+    })
   })
 })

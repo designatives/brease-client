@@ -4,9 +4,19 @@ import type { Navigation, Page, PageRef, Redirect, Release, Site, SitemapEntry, 
 import { resolvePath } from './urls'
 
 export { type Ga4Tag, ga4Html, ga4Tag, grantAnalytics } from './analytics'
+export { type CustomTag, customTags } from './custom-code'
 export { BreaseError } from './errors'
 export { type LocaleLink, localeHref, localeLinks, nativeName } from './locales'
+export { fieldPath, navPath } from './markers'
+export { matchRedirect } from './redirects'
 export { type BreaseSection, checkSections, sectionAttrs, sectionsAttrs } from './sections'
+export {
+  hmacHex,
+  type RevalidateBody,
+  type RevalidateTarget,
+  verifyRevalidate,
+  verifySignature
+} from './signature'
 export { type JsonLd, jsonLd, jsonLdHtml } from './structured-data'
 export type * from './types'
 export { buildPath, normalizeSlug, resolvePath } from './urls'
@@ -62,6 +72,7 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
   const doFetch: typeof fetch = opts.fetch ?? ((input, init) => fetch(input, init))
   // Re-read after a minute, so a locale added in Brease is served without a restart.
   let site: { promise: Promise<Site>; at: number } | undefined
+  let redirects: { promise: Promise<Redirect[]>; at: number } | undefined
 
   async function request<T>(
     path: string,
@@ -126,8 +137,16 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
     getNavigation(key, { locale }) {
       return request<Navigation>(`/content-api/navigations/${encodeURIComponent(key)}`, { locale }, true)
     },
+    // Cached for a minute, like the site: a proxy applies redirects per request (matchRedirect).
     getRedirects() {
-      return request<Redirect[]>('/content-api/redirects')
+      if (!redirects || Date.now() - redirects.at > SITE_TTL_MS) {
+        const promise = request<Redirect[]>('/content-api/redirects').catch((err) => {
+          if (redirects?.promise === promise) redirects = undefined
+          throw err
+        })
+        redirects = { promise, at: Date.now() }
+      }
+      return redirects.promise
     },
     getRelease() {
       return request<Release>('/content-api/release')
@@ -172,7 +191,10 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
     },
     async sitemap(baseUrl) {
       const base = baseUrl.replace(/\/+$/, '')
-      const refs = (await client.getPages()).filter((r) => !r.hidden)
+      // Only pages search may show: not hidden, not kept out of search, not site-wide content.
+      const refs = (await client.getPages()).filter(
+        (r) => !r.hidden && r.index !== false && !r.slug.split('/').some((part) => part.startsWith('_'))
+      )
       const byPage = new Map<string, Record<string, string>>()
       for (const ref of refs) {
         const alternates = byPage.get(ref.pageId) ?? {}

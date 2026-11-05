@@ -1,3 +1,5 @@
+import type { BreaseImage } from './types'
+
 export type Resize = 'cover' | 'contain' | 'fill'
 
 export type ImageOptions = { width?: number; height?: number; quality?: number; resize?: Resize }
@@ -17,9 +19,19 @@ export function srcset(
   return ''
 }
 
+// For an image field ({ assetId, url, alt, width, height }) or a plain URL.
 export function imageProps(
-  src: string,
+  image: string | BreaseImage,
   opts: { sizes?: string; widths?: number[]; width?: number; height?: number; quality?: number } = {}
-): { src: string; srcSet: string; sizes: string } {
-  return { src: imageUrl(src), srcSet: srcset(src), sizes: opts.sizes ?? '100vw' }
+): { src: string; srcSet: string; sizes: string; alt?: string; width?: number; height?: number } {
+  const src = typeof image === 'string' ? image : image.url
+  const extra =
+    typeof image === 'string'
+      ? {}
+      : {
+          ...(image.alt !== undefined ? { alt: image.alt } : {}),
+          ...(image.width ? { width: image.width } : {}),
+          ...(image.height ? { height: image.height } : {})
+        }
+  return { src: imageUrl(src), srcSet: srcset(src), sizes: opts.sizes ?? '100vw', ...extra }
 }

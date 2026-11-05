@@ -1,5 +1,6 @@
 import { env } from './env'
 import { type Brease, createBrease } from './index'
+import { verifyRevalidate } from './signature'
 import type { ResolvedSeo } from './types'
 
 export type BreaseMetadata = {
@@ -71,82 +72,26 @@ export function breaseFetch(tags: string[] = [], revalidate?: number | false): t
         } as RequestInit)
 }
 
-const MAX_SKEW_MS = 5 * 60_000
-
-type RevalidateBody = {
-  urls?: string[]
-  paths?: string[]
-  tags?: string[]
-  releaseId?: string
-  siteId?: string
-}
-
-// Route handler for app/api/revalidate/route.ts: `export const POST = revalidateHandler()`.
+// Route handler for app/api/brease/revalidate/route.ts, the path Brease calls (REVALIDATE_PATH):
+// `export const POST = revalidateHandler()`. Refreshes at once (expire: 0): a published release is live.
 export function revalidateHandler(secret?: string) {
   return async (req: Request): Promise<Response> => {
     const key = secret ?? env('BREASE_REVALIDATE_SECRET')
     if (!key)
       return json(500, { error: { code: 'internal', message: 'BREASE_REVALIDATE_SECRET is not set' } })
-    const raw = await req.text()
-    const ok = await verifySignature(
-      raw,
-      req.headers.get('x-brease-timestamp'),
-      req.headers.get('x-brease-signature'),
-      key
-    )
-    if (!ok) return json(401, { error: { code: 'unauthorized', message: 'Invalid or expired signature' } })
-
-    let body: RevalidateBody
-    try {
-      body = JSON.parse(raw || '{}') as RevalidateBody
-    } catch {
-      return json(400, { error: { code: 'validation', message: 'Body must be JSON' } })
-    }
-    const paths = new Set<string>(body.paths ?? [])
-    for (const url of body.urls ?? []) {
-      try {
-        paths.add(new URL(url, 'http://localhost').pathname)
-      } catch {}
-    }
-    const tags = new Set<string>(['brease', ...(body.tags ?? [])])
-
+    const target = await verifyRevalidate(req, key)
+    if (!target.ok)
+      return target.reason === 'body'
+        ? json(400, { error: { code: 'validation', message: 'Body must be JSON' } })
+        : json(401, { error: { code: 'unauthorized', message: 'Invalid or expired signature' } })
     const cache = (await import('next/cache')) as {
       revalidatePath: (path: string) => void
-      revalidateTag: (tag: string, profile?: string) => void
+      revalidateTag: (tag: string, profile?: string | { expire?: number }) => void
     }
-    for (const path of paths) cache.revalidatePath(path)
-    for (const tag of tags) cache.revalidateTag(tag, 'max')
-    return json(200, { revalidated: true, paths: [...paths], tags: [...tags] })
+    for (const path of target.paths) cache.revalidatePath(path)
+    for (const tag of target.tags) cache.revalidateTag(tag, { expire: 0 })
+    return json(200, { revalidated: true, paths: target.paths, tags: target.tags })
   }
-}
-
-export async function verifySignature(
-  body: string,
-  timestamp: string | null,
-  signature: string | null,
-  secret: string,
-  now = Date.now()
-): Promise<boolean> {
-  if (!timestamp || !signature) return false
-  if (!Number.isFinite(Number(timestamp)) || Math.abs(now - Number(timestamp)) > MAX_SKEW_MS) return false
-  const expected = await hmacHex(secret, `${timestamp}.${body}`)
-  if (expected.length !== signature.length) return false
-  let diff = 0
-  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ signature.charCodeAt(i)
-  return diff === 0
-}
-
-export async function hmacHex(secret: string, message: string): Promise<string> {
-  const enc = new TextEncoder()
-  const key = await crypto.subtle.importKey(
-    'raw',
-    enc.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  )
-  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(message)))
-  return Array.from(sig, (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 function json(status: number, data: unknown) {
@@ -166,3 +111,6 @@ export function breaseRedirects(client: Pick<Brease, 'getRedirects'> = createBre
     }
   }
 }
+
+// Kept here for older imports; they live in the root export now.
+export { hmacHex, verifySignature } from './signature'

@@ -6,7 +6,7 @@ Typed client for the Brease delivery API. Zero runtime dependencies, ESM + CJS, 
 pnpm add brease-client
 ```
 
-Set two environment variables (Brease writes them into your Vercel project at onboarding):
+Set these environment variables (Brease writes them into your Vercel project at onboarding):
 
 | Variable | Purpose |
 | --- | --- |
@@ -26,22 +26,23 @@ const brease = createBrease({
   fetch // optional custom fetch, e.g. to add framework cache options
 })
 
-await brease.getSite() // name, locales, defaultLocale, localeStrategy, global SEO
+await brease.getSite() // name, url (the public address), locales, defaultLocale, localeStrategy, global SEO, analytics
 await brease.getPage<Home>('', { locale: 'en' }) // Page<Home> | null ('' is the home page)
-await brease.getPages({ locale: 'en' }) // [{ pageId, locale, slug, url, hidden }]
+await brease.getPages({ locale: 'en' }) // [{ pageId, locale, slug, url, hidden, name, index, parentId, order }]
 await brease.getNavigation('main', { locale: 'en' }) // { key, locale, items } | null
-await brease.getRedirects() // [{ source, destination, status }]
+await brease.getRedirects() // [{ source, destination, status }], cached for a minute
 await brease.resolve('/en/about') // { slug: 'about', locale: 'en' } | null
 await brease.route(['en', 'about']) // the same from catch-all path segments; null for shared "_" pages
 await brease.routes() // [{ path: ['en', 'about'] }, …]: static params for every published page
 await brease.localeContext(['en', 'about']) // { locale, settings, alternates, homes } for BreaseLocaleProvider
-await brease.sitemap('https://example.com') // [{ url, alternates }]
+await brease.sitemap(site.url) // [{ url, alternates }]: pages search may show
 ```
 
 - `null` means 404. Every other failure throws a `BreaseError` with `status`, `code`, `requestId` and `details`.
 - 429 and 5xx responses (and network errors) are retried twice with backoff; `Retry-After` is honoured.
 - Commit pinning: the `x-brease-commit` header is sent from `VERCEL_GIT_COMMIT_SHA`, so every deployment reads the content release that was built and tested with its code.
-- `sitemap()` has no `lastModified`: releases are immutable snapshots and do not track per-page edit times.
+- `sitemap()` lists only pages search may show: not hidden, not kept out of search (`index: false`, the page's "Show in search results" switch), and no site-wide `_` pages. It has no `lastModified`: releases are immutable snapshots and do not track per-page edit times.
+- `site.url` is the site's public address (its primary domain), the one Brease uses in canonical URLs and hreflang; use it for the sitemap and `metadataBase` rather than an env variable of your own.
 - `getSite()` is cached for a minute, so a locale added in Brease is served without a restart.
 - `buildPath(settings, slug, locale)` and `resolvePath(settings, pathname)` are exported for routing code that already has the site settings.
 
@@ -72,8 +73,7 @@ async function load(params: Props['params']) {
 }
 
 export async function generateStaticParams() {
-  const pages = await brease.getPages()
-  return pages.filter((p) => !p.hidden).map((p) => ({ slug: p.url.split('/').filter(Boolean) }))
+  return (await brease.routes()).map((r) => ({ slug: r.path })) // published pages, without site-wide "_" pages
 }
 
 export async function generateMetadata({ params }: Props) {
@@ -89,28 +89,41 @@ export default async function Page({ params }: Props) {
 ```
 
 ```ts
-// app/api/revalidate/route.ts
+// app/api/brease/revalidate/route.ts: the path Brease calls after a content release
 import { revalidateHandler } from 'brease-client/next'
 
-export const POST = revalidateHandler() // uses BREASE_REVALIDATE_SECRET
+export const POST = revalidateHandler() // uses BREASE_REVALIDATE_SECRET; refreshes at once
 ```
+
+Other frameworks: `verifyRevalidate(request, secret)` (root export) checks the signature and returns the paths and
+cache tags to refresh, or why not (401 for a bad signature, 400 for a bad body).
+
+Redirects managed in Brease apply per request, so a new one works as soon as it's published (within a minute), with
+no rebuild:
 
 ```ts
-// next.config.ts: redirects managed in Brease
-import { createBrease } from 'brease-client'
+// proxy.ts (middleware.ts before Next 16)
+import { type NextRequest, NextResponse } from 'next/server'
+import { matchRedirect } from 'brease-client'
+import { brease } from '@/lib/brease'
 
-export default {
-  async redirects() {
-    const redirects = await createBrease().getRedirects()
-    return redirects.map((r) => ({ source: r.source, destination: r.destination, permanent: r.status === 301 || r.status === 308 }))
-  }
+export async function proxy(req: NextRequest) {
+  const hit = matchRedirect(await brease.getRedirects().catch(() => []), req.nextUrl.pathname)
+  return hit ? NextResponse.redirect(new URL(hit.destination, req.url), hit.status) : NextResponse.next()
 }
+
+export const config = { matcher: ['/((?!_next|api|.*\\..*).*)'] }
 ```
+
+Sources may use parameters as in Next's redirects (`/blog/:slug`, `/docs/:rest*`). `breaseRedirects()` (from
+`brease-client/next`, for `next.config`) still works, but only reads redirects at build time.
 
 ### Structured data (JSON-LD)
 
-`toMetadata` can't output scripts, so render the page's structured data with `jsonLd` (framework-free, from the
-root export). Each item's `json` is escaped for use inside a script tag.
+Structured data is content: the page's own entries (its SEO in Brease) and the site's (site SEO) come together in
+`page.resolvedSeo.structuredData`. `toMetadata` can't output scripts, so render them with `jsonLd` (framework-free,
+from the root export) on every page; each item's `json` is escaped for use inside a script tag. Entities your code
+already emits shouldn't be added in Brease too.
 
 ```tsx
 import { jsonLd } from 'brease-client'
@@ -121,6 +134,23 @@ import { jsonLd } from 'brease-client'
 ```
 
 `headTags` (HTML) and `breaseHead` (Astro) already include it; `jsonLdHtml(seo)` gives only the scripts.
+
+### Custom code
+
+Site-wide head code and a page's own code (both from SEO settings in Brease) run on the live site only when the site
+renders them. `toMetadata` can't, so render `customTags(page.resolvedSeo)` (root export) as real elements:
+
+```tsx
+import { customTags } from 'brease-client'
+
+{customTags(page.resolvedSeo).map(({ tag: Tag, attrs, content }, i) => {
+  const props = Object.fromEntries(Object.entries(attrs).map(([k, v]) => [k, v === '' ? true : v]))
+  return content ? <Tag key={i} {...props} dangerouslySetInnerHTML={{ __html: content }} /> : <Tag key={i} {...props} />
+})}
+```
+
+Only `script`, `style`, `meta`, `link` and `noscript` tags are kept. `headTags` (HTML) and `breaseHead` (Astro)
+include the code already.
 
 ### Google Analytics (GA4)
 
@@ -244,7 +274,7 @@ A locale switcher is then a few lines in any framework: a list of `<a href={l.hr
 - Everything that read a fixed locale (`getPage(…, { locale: 'hu' })`, `getNavigation`, `site.seo.hu`) takes it from the route instead.
 - Links inside content are already locale URLs. Build other internal links with `localeHref(settings, slug, locale)`.
 - Text written into components (button labels, captions) stays as it is; moving it into Brease content is a separate change.
-- `next.config`: `redirects: breaseRedirects()` (from `brease-client/next`) serves the redirects managed in Brease.
+- `proxy.ts`: `matchRedirect(await brease.getRedirects(), pathname)` applies the redirects managed in Brease per request (see above).
 
 ### Revalidation signature
 
@@ -289,13 +319,17 @@ const html = `<head>${headTags(page.resolvedSeo, { xDefault: 'https://example.co
 
 The Brease editor's Edit tool finds content through `data-brease` attributes:
 
-- `data-brease="hero.title"` on an element that renders a page content field (a path into `page.content`)
-- `data-brease="nav:footer"` on the element that wraps a navigation menu; clicking it opens that navigation's editor
-- `data-brease-block="<name>"` on a section's root: which component renders it (a hint for the AI)
+- `data-brease={fieldPath('hero.title')}` on an element that renders a field of the page being shown (a path into `page.content`, e.g. `hero.title` or `sections.2.items.0.label`)
+- `data-brease={fieldPath('footer.copyright', global.pageId)}` for a field of another page, such as site-wide content (`_global`): the path is prefixed with that page's id (`<pageId>:footer.copyright`). Take the id from the page you fetched, never a fixed one.
+- `data-brease={navPath('footer')}` (`nav:footer`) on the element that wraps a navigation menu; clicking it opens that navigation's editor
+- `data-brease-block`: a section root carries its section type (`{section.type}`); other blocks (header, footer, a hero outside the sections list) carry their component name. A hint for the AI.
 - `data-brease-sections="sections"` and `data-brease-section="<id>"`: the section list and its sections (see Sections)
 
 ```tsx
-<nav data-brease="nav:footer">{footer.items.map(/* … */)}</nav>
+import { fieldPath, navPath } from 'brease-client'
+
+<nav data-brease={navPath('footer')}>{footer.items.map(/* … */)}</nav>
+<p data-brease={fieldPath('footer.copyright', global.pageId)}>{global.content.footer.copyright}</p>
 ```
 
 ## Sections
@@ -311,7 +345,7 @@ src/brease/sections/          (or brease/sections/)
 ```
 
 - A page's sections are one list, `content.sections: [{ id, type, ...fields }]`, with the same ids in the same order in every locale. Fixed parts (a page title, header, footer, site-wide content) stay outside it.
-- `fields` describes the section's fields; Brease builds new sections from it (lorem ipsum, a placeholder image, `default`s, `enum`s' first values, `minItems` list items). Images are `{ assetId, url, alt }`, links `{ label, href }`, rich text `{ "type": "string", "format": "html" }`.
+- `fields` describes the section's fields; Brease builds new sections from it (lorem ipsum, a placeholder image, `default`s, `enum`s' first values, `minItems` list items). Images are `{ assetId, url, alt, width?, height? }` (`BreaseImage`), links `{ label, href }` (`BreaseLink`; an internal link also carries the page's `pageId`, and the delivery API sets its `href` for the requested locale), rich text `{ "type": "string", "format": "html" }`.
 - `"shared": true` keeps one content for every page that shows the type, on the site-wide page (`_global`) under `content.shared.<type>`; pages list only `{ id, type }` for it, and its markers use the other-page prefix (`<_global pageId>:shared.<type>.<field>`).
 - Markers: the list's element carries `data-brease-sections="sections"`, each section's root `data-brease-section={id}` and `data-brease-block={type}`, fields inside `data-brease="sections.<index>.<field>"`.
 
@@ -338,10 +372,20 @@ export function Sections({ sections }: { sections: BreaseSection[] }) {
 import { imageProps, srcset } from 'brease-client/image'
 
 const props = imageProps(page.content.hero.image, { sizes: '(min-width: 768px) 50vw, 100vw' })
-// <img src={props.src} srcSet={props.srcSet} sizes={props.sizes} />
+// <img src={props.src} srcSet={props.srcSet} sizes={props.sizes} alt={props.alt} width={props.width} height={props.height} />
 ```
 
-Brease files are served as-is from an S3 bucket, which doesn't resize images: the helpers return the URL unchanged with an empty `srcset`. For responsive images, let your framework resize them, e.g. `next/image` with the bucket's host in `images.remotePatterns`.
+An image field is `{ assetId, url, alt, width?, height? }` (`BreaseImage`); `imageProps` takes the field or a plain
+URL. Brease files are served as-is from storage, which doesn't resize images: the helpers return the URL unchanged
+with an empty `srcset`. For responsive images, let your framework resize them, e.g. `next/image` with the host of
+your Brease image URLs in `images.remotePatterns`.
+
+## Content links
+
+Link fields are `{ label, href }`. A link to another page of the site also carries that page's `pageId`, and the
+delivery API sets `href` to the page's URL in the locale you asked for, so renaming or moving a page never breaks a
+link and every locale links to its own version. External links are only the `href`. Rich text links to pages carry
+`data-brease-page="<pageId>"`, and their `href` is filled in the same way.
 
 ## Without JavaScript
 
