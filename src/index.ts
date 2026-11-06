@@ -38,6 +38,8 @@ export type BreaseOptions = {
   fetch?: typeof fetch
   retries?: number
   retryBaseMs?: number
+  // Per request; a timed-out request isn't retried. Keep it short where a visitor waits on it (a proxy).
+  timeoutMs?: number
 }
 
 export interface Brease {
@@ -74,10 +76,31 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
   const commit = opts.commit === false ? undefined : (opts.commit ?? env('VERCEL_GIT_COMMIT_SHA'))
   const retries = opts.retries ?? 2
   const baseMs = opts.retryBaseMs ?? 300
+  const timeoutMs = opts.timeoutMs ?? 5_000
   const doFetch: typeof fetch = opts.fetch ?? ((input, init) => fetch(input, init))
-  // Re-read after a minute, so a locale added in Brease is served without a restart.
-  let site: { promise: Promise<Site>; at: number } | undefined
-  let redirects: { promise: Promise<Redirect[]>; at: number } | undefined
+  // Re-read after a minute, so a locale added in Brease is served without a restart. While Brease can't be
+  // reached, the last good value is served (and kept for another minute) instead of failing every request.
+  function cached<T>(path: string) {
+    let entry: { promise: Promise<T>; at: number } | undefined
+    let last: { value: T } | undefined
+    return () => {
+      if (!entry || Date.now() - entry.at > SITE_TTL_MS) {
+        const promise: Promise<T> = request<T>(path).then(
+          (value) => {
+            last = { value }
+            return value
+          },
+          (err) => {
+            if (last) return last.value
+            if (entry?.promise === promise) entry = undefined
+            throw err
+          }
+        )
+        entry = { promise, at: Date.now() }
+      }
+      return entry.promise
+    }
+  }
 
   async function request<T>(
     path: string,
@@ -99,9 +122,10 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
     for (let attempt = 0; ; attempt++) {
       let res: Response
       try {
-        res = await doFetch(url, { method: 'GET', headers })
+        res = await doFetch(url, { method: 'GET', headers, signal: AbortSignal.timeout(timeoutMs) })
       } catch (err) {
-        if (attempt < retries) {
+        const timedOut = (err as Error).name === 'TimeoutError'
+        if (attempt < retries && !timedOut) {
           await sleep(backoff(attempt))
           continue
         }
@@ -122,17 +146,11 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
     return baseMs * 2 ** attempt + Math.random() * baseMs
   }
 
+  const cachedSite = cached<Site>('/content-api/site')
+  const cachedRedirects = cached<Redirect[]>('/content-api/redirects')
+
   const client: Brease = {
-    getSite() {
-      if (!site || Date.now() - site.at > SITE_TTL_MS) {
-        const promise = request<Site>('/content-api/site').catch((err) => {
-          if (site?.promise === promise) site = undefined
-          throw err
-        })
-        site = { promise, at: Date.now() }
-      }
-      return site.promise
-    },
+    getSite: cachedSite,
     getPage<T>(slug: string, { locale }: { locale: string }) {
       return request<Page<T>>('/content-api/page', { slug, locale }, true)
     },
@@ -148,16 +166,7 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
       return request<Navigation>(`/content-api/navigations/${encodeURIComponent(key)}`, { locale }, true)
     },
     // Cached for a minute, like the site: a proxy applies redirects per request (matchRedirect).
-    getRedirects() {
-      if (!redirects || Date.now() - redirects.at > SITE_TTL_MS) {
-        const promise = request<Redirect[]>('/content-api/redirects').catch((err) => {
-          if (redirects?.promise === promise) redirects = undefined
-          throw err
-        })
-        redirects = { promise, at: Date.now() }
-      }
-      return redirects.promise
-    },
+    getRedirects: cachedRedirects,
     getRelease() {
       return request<Release>('/content-api/release')
     },

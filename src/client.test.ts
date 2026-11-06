@@ -112,6 +112,30 @@ describe('createBrease', () => {
     })
     expect(calls).toHaveLength(3)
   })
+
+  it('times out a hung request without retrying it', async () => {
+    const fetch = vi.fn(
+      (_url: string | URL | Request, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) =>
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+        )
+    )
+    const b = createBrease({ token: 't', fetch: fetch as unknown as typeof globalThis.fetch, timeoutMs: 20 })
+    await expect(b.getRedirects()).rejects.toMatchObject({ code: 'network' })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('serves the last good site while Brease fails', async () => {
+    const { fetch, calls } = mockFetch([json(site), json({}, 500)])
+    const b = createBrease({ token: 't', fetch, retries: 0 })
+    const now = Date.now()
+    await b.getSite()
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(now + 61_000)
+    expect(await b.getSite()).toEqual(site)
+    expect(await b.getSite()).toEqual(site)
+    spy.mockRestore()
+    expect(calls).toHaveLength(2)
+  })
 })
 
 describe('resolve', () => {
