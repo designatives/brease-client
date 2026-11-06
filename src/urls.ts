@@ -19,18 +19,33 @@ export function buildPath(settings: UrlSettings, slug: string, locale: string): 
   return `/${parts.join('/')}`
 }
 
+// The home page's slug is empty, so the slug and the separator next to it are optional together.
+function customPattern(template: string): RegExp {
+  const parts = normalizeSlug(template).split(/(\{locale\}|\{slug\})/)
+  const slashBefore = (i: number) => parts[i] === '{slug}' && !!parts[i - 1]?.endsWith('/')
+  const slashAfter = (i: number) =>
+    parts[i] === '{slug}' && !slashBefore(i) && !!parts[i + 1]?.startsWith('/')
+  const pattern = parts
+    .map((part, i) => {
+      if (part === '{locale}') return '(?<locale>[^/]+)'
+      if (part === '{slug}') {
+        if (slashBefore(i)) return '(?:/(?<slug>.*))?'
+        if (slashAfter(i)) return '(?:(?<slug>.*)/)?'
+        return '(?<slug>.*)'
+      }
+      let text = part
+      if (slashBefore(i + 1)) text = text.slice(0, -1)
+      if (slashAfter(i - 1)) text = text.slice(1)
+      return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    })
+    .join('')
+  return new RegExp(`^${pattern}$`)
+}
+
 export function resolvePath(settings: UrlSettings, pathname: string): { slug: string; locale: string } {
   const clean = normalizeSlug(decodeURIComponent(pathname.split(/[?#]/)[0] ?? ''))
   if (settings.localeStrategy === 'CUSTOM' && settings.urlTemplate) {
-    const pattern = normalizeSlug(settings.urlTemplate)
-      .split(/(\{locale\}|\{slug\})/)
-      .map((part) => {
-        if (part === '{locale}') return '(?<locale>[^/]+)'
-        if (part === '{slug}') return '(?<slug>.*)'
-        return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      })
-      .join('')
-    const match = new RegExp(`^${pattern}$`).exec(clean)
+    const match = customPattern(settings.urlTemplate).exec(clean)
     if (match?.groups) {
       return {
         slug: normalizeSlug(match.groups.slug ?? ''),

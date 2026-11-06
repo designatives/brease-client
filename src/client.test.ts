@@ -134,6 +134,7 @@ describe('resolve', () => {
     const custom: Site = { ...site, localeStrategy: 'CUSTOM', urlTemplate: '/site/{locale}/{slug}' }
     expect(await resolveWith(custom, '/site/en/a/b')).toEqual({ slug: 'a/b', locale: 'en' })
     expect(await resolveWith(custom, '/site/de/a')).toBeNull()
+    expect(await resolveWith(custom, '/site/en')).toEqual({ slug: '', locale: 'en' })
   })
 })
 
