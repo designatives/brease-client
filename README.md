@@ -394,15 +394,15 @@ export function Sections({ sections }: { sections: BreaseSection[] }) {
 ## Images
 
 ```ts
-import { imageProps, srcset } from 'brease-client/image'
+import { imageProps } from 'brease-client/image'
 
-const props = imageProps(page.content.hero.image, { sizes: '(min-width: 768px) 50vw, 100vw' })
-// <img src={props.src} srcSet={props.srcSet} sizes={props.sizes} alt={props.alt} width={props.width} height={props.height} />
+const props = imageProps(page.content.hero.image)
+// <img src={props.src} alt={props.alt} width={props.width} height={props.height} />
 ```
 
 An image field is `{ assetId, url, alt, width?, height? }` (`BreaseImage`); `imageProps` takes the field or a plain
-URL. Brease files are served as-is from storage, which doesn't resize images: the helpers return the URL unchanged
-with an empty `srcset`. For responsive images, let your framework resize them, e.g. `next/image` with the host of
+URL. Brease files are served as-is from storage, which doesn't resize images: the helpers return the URL unchanged,
+without `srcSet` or `sizes` (`srcset()` and the resize options are deprecated no-ops). For responsive images, let your framework resize them, e.g. `next/image` with the host of
 your Brease image URLs in `images.remotePatterns`.
 
 ## Content links

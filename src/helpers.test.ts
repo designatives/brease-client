@@ -133,7 +133,7 @@ describe('image', () => {
     const src = 'https://bucket.fsn1.your-objectstorage.com/site_1/ast_1/hero.jpg'
     expect(imageUrl(src, { width: 640 })).toBe(src)
     expect(srcset(src)).toBe('')
-    expect(imageProps(src, { sizes: '50vw' })).toEqual({ src, srcSet: '', sizes: '50vw' })
+    expect(imageProps(src, { sizes: '50vw' })).toEqual({ src })
   })
 })
 
@@ -296,8 +296,6 @@ describe('image fields', () => {
       imageProps({ assetId: 'ast_1', url: 'https://cdn.example/a.jpg', alt: 'A', width: 800, height: 600 })
     ).toEqual({
       src: 'https://cdn.example/a.jpg',
-      srcSet: '',
-      sizes: '100vw',
       alt: 'A',
       width: 800,
       height: 600
