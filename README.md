@@ -10,7 +10,7 @@ Set these environment variables (Brease writes them into your Vercel project at 
 
 | Variable | Purpose |
 | --- | --- |
-| `BREASE_TOKEN` | Read-only delivery token (`brs_live_…`). It identifies the site. |
+| `BREASE_TOKEN` | Read-only delivery token (`brs_live_…`). It identifies the site. Keep it on the server: anyone holding it can also read unpublished draft content of a known commit or draft branch. |
 | `BREASE_API_URL` | Optional. Defaults to `https://api.brease.io`. Inside a Brease sandbox it points at the local content server. |
 | `BREASE_REVALIDATE_SECRET` | ISR/SSR sites only: secret for the revalidate route. |
 
@@ -23,6 +23,7 @@ const brease = createBrease({
   token: process.env.BREASE_TOKEN, // default
   apiUrl: process.env.BREASE_API_URL, // default, falls back to https://api.brease.io
   commit: process.env.VERCEL_GIT_COMMIT_SHA, // default; false disables commit pinning
+  branch: process.env.VERCEL_GIT_COMMIT_REF, // default; only Brease draft branches (brease/draft/…) are sent
   fetch // optional custom fetch, e.g. to add framework cache options
 })
 
@@ -30,6 +31,7 @@ await brease.getSite() // name, url (the public address), locales, defaultLocale
 await brease.getPage<Home>('', { locale: 'en' }) // Page<Home> | null ('' is the home page)
 await brease.getPages({ locale: 'en' }) // [{ pageId, locale, slug, url, hidden, name, index, parentId, order, template }]
 await brease.getPages({ locale: 'en', parentId: news.pageId, withContent: true }) // a news list, with each page's content
+await brease.getPages({ locale: 'en', parentId: null }) // top-level pages only
 await brease.getNavigation('main', { locale: 'en' }) // { key, locale, items } | null
 await brease.getRedirects() // [{ source, destination, status }], cached for a minute
 await brease.resolve('/en/about') // { slug: 'about', locale: 'en' } | null
@@ -41,13 +43,13 @@ await brease.sitemap(site.url) // [{ url, alternates }]: pages search may show
 
 - `null` means 404. Every other failure throws a `BreaseError` with `status`, `code`, `requestId` and `details`.
 - 429 and 5xx responses (and network errors) are retried twice with backoff; `Retry-After` is honoured.
-- Commit pinning: the `x-brease-commit` header is sent from `VERCEL_GIT_COMMIT_SHA`, so every deployment reads the content release that was built and tested with its code.
+- Commit pinning: the `x-brease-commit` header is sent from `VERCEL_GIT_COMMIT_SHA`, so every deployment reads the content release that was built and tested with its code. On a Brease draft branch the `x-brease-branch` header (from `VERCEL_GIT_COMMIT_REF`) lets later commits there, such as a developer's fix, still read the draft's content.
 - `sitemap()` lists only pages search may show: not hidden, not kept out of search (`index: false`, the page's "Show in search results" switch), and no site-wide `_` pages. It has no `lastModified`: releases are immutable snapshots and do not track per-page edit times.
 - `getPages({ parentId, template, withContent })` narrows the list to a page's children or one template, and with
   `withContent` adds each page's content (one locale, hidden pages left out, up to 100 pages): build news, team or
   job lists from it instead of fetching every page.
 - `site.url` is the site's public address (its primary domain), the one Brease uses in canonical URLs and hreflang; use it for the sitemap and `metadataBase` rather than an env variable of your own.
-- `getSite()` is cached for a minute, so a locale added in Brease is served without a restart.
+- `getSite()` is cached for a minute, so a locale added in Brease is served without a restart. The revalidate route (`revalidateHandler`) clears it on a publish, and the editor's preview (`BREASE_PREVIEW=1`) never caches it.
 - `buildPath(settings, slug, locale)` and `resolvePath(settings, pathname)` are exported for routing code that already has the site settings.
 
 ## Next.js (App Router)

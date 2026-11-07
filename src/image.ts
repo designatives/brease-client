@@ -4,10 +4,12 @@ export type Resize = 'cover' | 'contain' | 'fill'
 
 export type ImageOptions = { width?: number; height?: number; quality?: number; resize?: Resize }
 
+// Not used by Brease: kept for sites that import it.
 export const DEFAULT_WIDTHS = [320, 640, 960, 1280, 1920]
 
 // Brease files are plain objects in an S3 bucket, with no resizing on the storage side: URLs pass through,
-// and resizing is left to the site's image pipeline (e.g. next/image with the bucket in remotePatterns).
+// and resizing is left to the site's image pipeline (e.g. next/image with the bucket in remotePatterns). The
+// options are accepted but ignored, and srcset is always empty, so existing calls keep working.
 export function imageUrl(src: string, _opts: ImageOptions = {}): string {
   return src
 }
