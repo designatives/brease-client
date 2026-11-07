@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { BreaseError, createBrease } from './index'
+import { BreaseError, clearBreaseCache, createBrease } from './index'
 import type { PageRef, Site } from './types'
 
 type Call = { url: string; headers: Record<string, string> }
@@ -69,6 +69,29 @@ describe('createBrease', () => {
     const b = mockFetch([json([])])
     await createBrease({ fetch: b.fetch, commit: false }).getRedirects()
     expect(b.calls[0]?.headers['x-brease-commit']).toBeUndefined()
+  })
+
+  it('sends draft branches only, and an empty parentId for top-level pages', async () => {
+    const a = mockFetch([json([]), json([])])
+    await createBrease({ token: 't', fetch: a.fetch, branch: 'brease/draft/chat_1' }).getPages({
+      parentId: null
+    })
+    expect(a.calls[0]?.url).toBe('https://api.brease.io/content-api/pages?parentId=')
+    expect(a.calls[0]?.headers['x-brease-branch']).toBe('brease/draft/chat_1')
+    await createBrease({ token: 't', fetch: a.fetch, branch: 'feature/x' }).getPages()
+    expect(a.calls[1]?.headers['x-brease-branch']).toBeUndefined()
+  })
+
+  it('reads the site fresh in the editor preview and after clearBreaseCache', async () => {
+    const { fetch, calls } = mockFetch([json(site), json(site), json(site)])
+    const b = createBrease({ token: 't', fetch })
+    await b.getSite()
+    await b.getSite()
+    clearBreaseCache()
+    await b.getSite()
+    vi.stubEnv('BREASE_PREVIEW', '1')
+    await b.getSite()
+    expect(calls).toHaveLength(3)
   })
 
   it('returns null on 404 for pages and navigations', async () => {
@@ -171,6 +194,7 @@ describe('catch-all route', () => {
     expect(await b.route(['en', 'a%20b', 'c'])).toEqual({ slug: 'a b/c', locale: 'en' })
     expect(await b.route(['rolunk'])).toEqual({ slug: 'rolunk', locale: 'hu' })
     expect(await b.route(['_global'])).toBeNull()
+    expect(await b.route(['%E0%A4'])).toEqual({ slug: '%E0%A4', locale: 'hu' })
   })
 
   it('lists the static params of every published, routed page', async () => {

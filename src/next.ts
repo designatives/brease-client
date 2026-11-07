@@ -1,5 +1,5 @@
 import { env } from './env'
-import { type Brease, createBrease } from './index'
+import { type Brease, clearBreaseCache, createBrease } from './index'
 import { verifyRevalidate } from './signature'
 import type { ResolvedSeo } from './types'
 
@@ -88,6 +88,7 @@ export function revalidateHandler(secret?: string) {
       revalidatePath: (path: string) => void
       revalidateTag: (tag: string, profile?: string | { expire?: number }) => void
     }
+    clearBreaseCache()
     for (const path of target.paths) cache.revalidatePath(path)
     for (const tag of target.tags) cache.revalidateTag(tag, { expire: 0 })
     return json(200, { revalidated: true, paths: target.paths, tags: target.tags })
