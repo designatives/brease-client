@@ -42,8 +42,17 @@ function customPattern(template: string): RegExp {
   return new RegExp(`^${pattern}$`)
 }
 
+// A malformed escape (a bot asking for /%E0) stays as it is: no page matches it, and nothing throws.
+export function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 export function resolvePath(settings: UrlSettings, pathname: string): { slug: string; locale: string } {
-  const clean = normalizeSlug(decodeURIComponent(pathname.split(/[?#]/)[0] ?? ''))
+  const clean = normalizeSlug(safeDecode(pathname.split(/[?#]/)[0] ?? ''))
   if (settings.localeStrategy === 'CUSTOM' && settings.urlTemplate) {
     const match = customPattern(settings.urlTemplate).exec(clean)
     if (match?.groups) {
@@ -68,5 +77,5 @@ export function canonicalPath(settings: UrlSettings, pathname: string): string |
   const { slug, locale } = resolvePath(settings, path)
   const canonical = buildPath(settings, slug, locale)
   const trim = (p: string) => (p.length > 1 ? p.replace(/\/+$/, '') : p)
-  return trim(decodeURIComponent(path)) === trim(canonical) ? null : canonical
+  return trim(safeDecode(path)) === trim(canonical) ? null : canonical
 }

@@ -1,7 +1,9 @@
 import type { Redirect } from './types'
+import { safeDecode } from './urls'
 
-// Redirects managed in Brease, applied per request (in a proxy or middleware), so a new redirect works as
-// soon as it's published, with no rebuild. Sources are paths with optional parameters, as in Next's
+// Redirects managed in Brease, applied per request (in a proxy or middleware), so a published redirect works
+// without a rebuild, usually within a minute or two: getRedirects keeps the list for a minute (revalidateHandler
+// clears it), and the content API's CDN may serve the old list a little longer. Sources are paths with optional parameters, as in Next's
 // redirects: "/old", "/blog/:slug", "/docs/:rest*" (any number of segments); the destination may use them.
 export function matchRedirect(
   redirects: Redirect[],
@@ -37,7 +39,7 @@ function matchSource(source: string, path: string): Record<string, string> | nul
     if (value === undefined) return null
     const param = /^:([A-Za-z_][A-Za-z0-9_]*)$/.exec(seg)
     if (param) params[param[1] as string] = value
-    else if (decodeURIComponent(value) !== decodeURIComponent(seg)) return null
+    else if (safeDecode(value) !== safeDecode(seg)) return null
   }
   return want.length === have.length ? params : null
 }
