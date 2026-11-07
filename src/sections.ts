@@ -1,6 +1,7 @@
 // Sections convention: a page's sections are one list, content.sections, rendered in order inside an element
 // with data-brease-sections="sections". Every section type is a folder (src/brease/sections/<type>/) with a
-// section.json and its component; the folder's map file renders each type, and nothing for unknown ones.
+// section.json and its component; the folder's map file (MAP_FILE) renders each type, and nothing for unknown
+// ones.
 
 export type BreaseSection<T = Record<string, unknown>> = { id: string; type: string } & T
 
@@ -15,6 +16,9 @@ export function sectionAttrs(section: { id: string; type: string }) {
 export const SECTION_FOLDERS = ['src/brease/sections', 'brease/sections']
 
 const TYPE_NAME = /^[a-z0-9]+(-[a-z0-9]+)*$/
+
+// The file that renders each section type: index.tsx in React, Sections.astro in the Astro starter.
+const MAP_FILE = /^(index|sections)\.(astro|vue|svelte|[cm]?[jt]sx?)$/i
 
 type PageLocales = Record<string, Record<string, { content?: unknown }>>
 
@@ -33,9 +37,11 @@ export function checkSections(files: Record<string, string>, pages: PageLocales 
         .map((s) => s[0] as string)
     )
   ]
-  const map = inFolder.find(([p]) => /^index\.[cm]?[jt]sx?$/.test(p))
+  const map = inFolder.find(([p]) => MAP_FILE.test(p))
   if (!map)
-    warnings.push(`${folder} has no map file (index.tsx, index.ts or index.js) rendering the section types`)
+    warnings.push(
+      `${folder} has no map file (index.tsx, index.ts, Sections.astro or the like) rendering the section types`
+    )
   const marked = inFolder.some(
     ([, text]) => text.includes('data-brease-section') || text.includes('sectionAttrs(')
   )

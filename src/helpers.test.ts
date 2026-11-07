@@ -175,6 +175,17 @@ describe('sections', () => {
   })
 })
 
+describe('sections in an Astro site', () => {
+  it('takes Sections.astro as the map file and checks it', () => {
+    const files = {
+      'src/brease/sections/Sections.astro': 'const map = { hero: Hero } // {...sectionAttrs(s)}',
+      'src/brease/sections/hero/section.json': '{"name":"Hero"}',
+      'src/brease/sections/faq/section.json': '{"name":"FAQ"}'
+    }
+    expect(checkSections(files)).toEqual(['faq is in src/brease/sections but not in its map file'])
+  })
+})
+
 describe('ga4 tag', () => {
   it('renders nothing when the tag is off or invalid', () => {
     expect(ga4Tag({ analytics: null })).toBeNull()
@@ -232,6 +243,7 @@ describe('redirects per request', () => {
     expect(matchRedirect(redirects, '/blog/a/b')).toBeNull()
     expect(matchRedirect(redirects, '/loop')).toBeNull()
     expect(matchRedirect(redirects, '/elsewhere')).toBeNull()
+    expect(matchRedirect(redirects, '/%E0%A4')).toBeNull()
   })
 })
 
@@ -302,6 +314,7 @@ describe('canonicalPath', () => {
   }
   it('names the canonical form of a duplicate path, null for the canonical one', () => {
     expect(canonicalPath(settings, '/en/about')).toBe('/about')
+    expect(() => canonicalPath(settings, '/%E0%A4')).not.toThrow()
     expect(canonicalPath(settings, '/about/')).toBeNull()
     expect(canonicalPath(settings, '/hu/rolunk?x=1')).toBeNull()
     expect(canonicalPath({ ...settings, localeStrategy: 'PREFIX_ALL' }, '/about')).toBe('/en/about')
