@@ -14,6 +14,21 @@ Set these environment variables (Brease writes them into your Vercel project at 
 | `BREASE_API_URL` | Optional. Defaults to `https://api.brease.io`. Inside a Brease sandbox it points at the local content server. |
 | `BREASE_REVALIDATE_SECRET` | ISR/SSR sites only: secret for the revalidate route. |
 
+## Getting started
+
+For an existing Next.js site (other frameworks follow the same steps; see [Astro](#astro) and [Plain HTML](#plain-html--other-servers)):
+
+1. Connect the site in Brease. Onboarding writes the variables above into the hosting project; copy them into `.env.local` for local development.
+2. Create the client in `lib/brease.ts` with `breaseFetch()` ([Next.js](#nextjs-app-router)).
+3. Render every page from one catch-all route: `brease.route(path)`, then `getPage(slug, { locale })`, with `generateStaticParams = () => brease.routes()`.
+4. Move the texts, images and links editors should change into the page's content, in the shapes under [Content links](#content-links) and [Images](#images). Shared parts go on the site-wide `_global` page; menus come from `getNavigation()`.
+5. Add [editor markers](#editor-markers) (`data-brease`) to the elements that show content.
+6. Render SEO with `toMetadata(page.resolvedSeo)`, plus [`jsonLd`](#structured-data-json-ld) and [`customTags`](#custom-code).
+7. Add the revalidate route and the redirects proxy (both under [Next.js](#nextjs-app-router)).
+8. Optional: [sections](#sections), `content.schema.json` and a `BREASE.md` that tells Brease's AI how the site is built. Then run `npx brease-client check`.
+
+On Cloudflare, pass `commit: process.env.WORKERS_CI_COMMIT_SHA` to `createBrease()` so a build reads the content released with its commit.
+
 ## API
 
 ```ts
@@ -420,4 +435,46 @@ Every call is a plain REST request:
 curl -H "Authorization: Bearer $BREASE_TOKEN" "https://api.brease.io/content-api/page?slug=about&locale=en"
 ```
 
-Routes: `GET /content-api/site`, `/content-api/pages?locale=`, `/content-api/page?slug=&locale=`, `/content-api/navigations/:key?locale=`, `/content-api/redirects`, `/content-api/release`.
+| Route | Query | Returns |
+| --- | --- | --- |
+| `GET /content-api/site` | | `{ name, url, locales, defaultLocale, localeStrategy, urlTemplate, seo: { <locale>: … }, analytics }` |
+| `GET /content-api/pages` | `locale`, `parentId`, `template`, `withContent` | `[{ pageId, locale, slug, url, hidden, name, index, parentId, order, template, content? }]` |
+| `GET /content-api/page` | `slug`, `locale` | one page (below); 404 when missing or hidden |
+| `GET /content-api/navigations/:key` | `locale` | `{ key, locale, items: [{ id, label, url, pageId?, target?, children }] }` |
+| `GET /content-api/redirects` | | `[{ source, destination, status }]` |
+| `GET /content-api/release` | | `{ id, number, commitSha, liveAt }` of the release served |
+| `GET /content-api/openapi.json` | | the OpenAPI document |
+
+A page:
+
+```json
+{
+  "pageId": "pg_about",
+  "name": "About",
+  "locale": "en",
+  "slug": "about",
+  "url": "/about",
+  "hidden": false,
+  "content": {
+    "template": "page",
+    "title": "About us",
+    "image": { "assetId": "ast_…", "url": "https://…/team.webp", "alt": "Our team", "width": 2400, "height": 1600 },
+    "cta": { "label": "Contact us", "href": "/contact", "pageId": "pg_contact" }
+  },
+  "seo": { "title": "About us" },
+  "resolvedSeo": {
+    "title": "About us – Acme",
+    "canonical": "https://www.acme.com/about",
+    "robots": { "index": true, "follow": true },
+    "openGraph": { "title": "About us – Acme" },
+    "twitter": {},
+    "structuredData": [],
+    "alternates": { "en": "https://www.acme.com/about", "de": "https://www.acme.com/de/ueber-uns" }
+  },
+  "alternates": { "de": "/de/ueber-uns" }
+}
+```
+
+`content` is the page's own JSON. `seo` is what the page sets; `resolvedSeo` has the site's defaults and title template applied, so render it as is.
+
+Requests take `x-brease-commit` and `x-brease-branch` (see commit pinning above) and `If-None-Match`; responses carry `ETag`, `x-brease-release` and `Cache-Control: public, s-maxage=60, stale-while-revalidate=300`. Errors are `{ "error": { "code", "message" } }`: 401 `unauthorized`, 404 `not_found`, 422 `validation`, 429 `rate_limited` (with `Retry-After`).
