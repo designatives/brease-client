@@ -34,6 +34,7 @@ export type LocaleContext = {
 export type BreaseOptions = {
   token?: string
   apiUrl?: string
+  // Defaults to the commit the host builds: Vercel, Cloudflare Workers Builds or Cloudflare Pages.
   commit?: string | false
   // The deployment's git branch. On a Brease draft branch, a commit Brease didn't make (a developer's fix)
   // still reads the draft's content.
@@ -76,6 +77,21 @@ const SITE_TTL_MS = 60_000
 const DRAFT_BRANCH_PREFIX = 'brease/draft/'
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+// The commit and branch the host is building, each pair read from the same host.
+const HOST_GIT_ENV = [
+  ['VERCEL_GIT_COMMIT_SHA', 'VERCEL_GIT_COMMIT_REF'],
+  ['WORKERS_CI_COMMIT_SHA', 'WORKERS_CI_BRANCH'],
+  ['CF_PAGES_COMMIT_SHA', 'CF_PAGES_BRANCH']
+] as const
+
+function hostGit(): { commit?: string; branch?: string } {
+  for (const [commit, branch] of HOST_GIT_ENV) {
+    const sha = env(commit)
+    if (sha) return { commit: sha, branch: env(branch) }
+  }
+  return {}
+}
+
 // Bumped by clearBreaseCache: every client then re-reads its site and redirects on next use.
 let cacheGeneration = 0
 
@@ -86,9 +102,10 @@ export function clearBreaseCache() {
 
 export function createBrease(opts: BreaseOptions = {}): Brease {
   const apiUrl = (opts.apiUrl ?? env('BREASE_API_URL') ?? 'https://api.brease.io').replace(/\/+$/, '')
-  const commit = opts.commit === false ? undefined : (opts.commit ?? env('VERCEL_GIT_COMMIT_SHA'))
+  const host = hostGit()
+  const commit = opts.commit === false ? undefined : (opts.commit ?? host.commit)
   // Only draft branches matter to Brease; sending others would only split the API's cache.
-  const branch = opts.branch === false ? undefined : (opts.branch ?? env('VERCEL_GIT_COMMIT_REF'))
+  const branch = opts.branch === false ? undefined : (opts.branch ?? host.branch)
   const draftBranch = branch?.startsWith(DRAFT_BRANCH_PREFIX) ? branch : undefined
   const retries = opts.retries ?? 2
   const baseMs = opts.retryBaseMs ?? 300

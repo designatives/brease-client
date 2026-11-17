@@ -71,6 +71,35 @@ describe('createBrease', () => {
     expect(b.calls[0]?.headers['x-brease-commit']).toBeUndefined()
   })
 
+  it('pins the commit and draft branch from Cloudflare Workers Builds and Pages', async () => {
+    vi.stubEnv('BREASE_TOKEN', 't')
+    vi.stubEnv('VERCEL_GIT_COMMIT_SHA', '')
+    vi.stubEnv('WORKERS_CI_COMMIT_SHA', 'cafe01')
+    vi.stubEnv('WORKERS_CI_BRANCH', 'brease/draft/chat_1')
+    const a = mockFetch([json([])])
+    await createBrease({ fetch: a.fetch }).getRedirects()
+    expect(a.calls[0]?.headers['x-brease-commit']).toBe('cafe01')
+    expect(a.calls[0]?.headers['x-brease-branch']).toBe('brease/draft/chat_1')
+    vi.stubEnv('WORKERS_CI_COMMIT_SHA', '')
+    vi.stubEnv('CF_PAGES_COMMIT_SHA', 'cafe02')
+    vi.stubEnv('CF_PAGES_BRANCH', 'main')
+    const b = mockFetch([json([])])
+    await createBrease({ fetch: b.fetch }).getRedirects()
+    expect(b.calls[0]?.headers['x-brease-commit']).toBe('cafe02')
+    expect(b.calls[0]?.headers['x-brease-branch']).toBeUndefined()
+  })
+
+  it('takes the branch from the same host as the commit', async () => {
+    vi.stubEnv('BREASE_TOKEN', 't')
+    vi.stubEnv('VERCEL_GIT_COMMIT_SHA', 'v1')
+    vi.stubEnv('VERCEL_GIT_COMMIT_REF', 'main')
+    vi.stubEnv('WORKERS_CI_BRANCH', 'brease/draft/chat_1')
+    const a = mockFetch([json([])])
+    await createBrease({ fetch: a.fetch }).getRedirects()
+    expect(a.calls[0]?.headers['x-brease-commit']).toBe('v1')
+    expect(a.calls[0]?.headers['x-brease-branch']).toBeUndefined()
+  })
+
   it('sends draft branches only, and an empty parentId for top-level pages', async () => {
     const a = mockFetch([json([]), json([])])
     await createBrease({ token: 't', fetch: a.fetch, branch: 'brease/draft/chat_1' }).getPages({

@@ -6,7 +6,7 @@ Typed client for the Brease delivery API. Zero runtime dependencies, ESM + CJS, 
 pnpm add brease-client
 ```
 
-Set these environment variables (Brease writes them into your Vercel project at onboarding):
+Set these environment variables (Brease writes them into your Vercel or Cloudflare project at onboarding):
 
 | Variable | Purpose |
 | --- | --- |
@@ -25,9 +25,10 @@ For an existing Next.js site (other frameworks follow the same steps; see [Astro
 5. Add [editor markers](#editor-markers) (`data-brease`) to the elements that show content.
 6. Render SEO with `toMetadata(page.resolvedSeo)`, plus [`jsonLd`](#structured-data-json-ld) and [`customTags`](#custom-code).
 7. Add the revalidate route and the redirects proxy (both under [Next.js](#nextjs-app-router)).
-8. Optional: [sections](#sections), `content.schema.json` and a `BREASE.md` that tells Brease's AI how the site is built. Then run `npx brease-client check`.
+8. Add a `BREASE.md` that tells Brease's AI how the site is built. Brease counts a site as integrated only when the repo has both `brease-client` and `BREASE.md`.
+9. Optional: [sections](#sections) and `content.schema.json`. Then run `npx brease-client check`.
 
-On Cloudflare, pass `commit: process.env.WORKERS_CI_COMMIT_SHA` to `createBrease()` so a build reads the content released with its commit.
+On Vercel, Cloudflare Workers Builds and Cloudflare Pages, the client picks up the commit and branch being built on its own (see commit pinning below), so every build reads the content released with its commit.
 
 ## API
 
@@ -37,8 +38,8 @@ import { createBrease } from 'brease-client'
 const brease = createBrease({
   token: process.env.BREASE_TOKEN, // default
   apiUrl: process.env.BREASE_API_URL, // default, falls back to https://api.brease.io
-  commit: process.env.VERCEL_GIT_COMMIT_SHA, // default; false disables commit pinning
-  branch: process.env.VERCEL_GIT_COMMIT_REF, // default; only Brease draft branches (brease/draft/…) are sent
+  commit: process.env.VERCEL_GIT_COMMIT_SHA, // default (or WORKERS_CI_COMMIT_SHA, CF_PAGES_COMMIT_SHA); false disables commit pinning
+  branch: process.env.VERCEL_GIT_COMMIT_REF, // default (or WORKERS_CI_BRANCH, CF_PAGES_BRANCH); only Brease draft branches (brease/draft/…) are sent
   fetch // optional custom fetch, e.g. to add framework cache options
 })
 
@@ -58,13 +59,14 @@ await brease.sitemap(site.url) // [{ url, alternates }]: pages search may show
 
 - `null` means 404. Every other failure throws a `BreaseError` with `status`, `code`, `requestId` and `details`.
 - 429 and 5xx responses (and network errors) are retried twice with backoff; `Retry-After` is honoured.
-- Commit pinning: the `x-brease-commit` header is sent from `VERCEL_GIT_COMMIT_SHA`, so every deployment reads the content release that was built and tested with its code. On a Brease draft branch the `x-brease-branch` header (from `VERCEL_GIT_COMMIT_REF`) lets later commits there, such as a developer's fix, still read the draft's content.
+- Commit pinning: the `x-brease-commit` header is sent from the commit the host is building (`VERCEL_GIT_COMMIT_SHA` on Vercel, `WORKERS_CI_COMMIT_SHA` on Cloudflare Workers Builds, `CF_PAGES_COMMIT_SHA` on Cloudflare Pages), so every deployment reads the content release that was built and tested with its code. On a Brease draft branch the `x-brease-branch` header (from the same host's `VERCEL_GIT_COMMIT_REF`, `WORKERS_CI_BRANCH` or `CF_PAGES_BRANCH`) lets later commits there, such as a developer's fix, still read the draft's content. These are build-time variables: pages rendered at request time on Cloudflare read the live release unless you pass `commit` yourself.
 - `sitemap()` lists only pages search may show: not hidden, not kept out of search (`index: false`, the page's "Show in search results" switch), and no site-wide `_` pages. It has no `lastModified`: releases are immutable snapshots and do not track per-page edit times.
 - `getPages({ parentId, template, withContent })` narrows the list to a page's children or one template, and with
   `withContent` adds each page's content (one locale, hidden pages left out, up to 100 pages): build news, team or
   job lists from it instead of fetching every page.
 - `site.url` is the site's public address (its primary domain), the one Brease uses in canonical URLs and hreflang; use it for the sitemap and `metadataBase` rather than an env variable of your own.
-- `getSite()` is cached for a minute, so a locale added in Brease is served without a restart. The revalidate route (`revalidateHandler`) clears it on a publish, and the editor's preview (`BREASE_PREVIEW=1`) never caches it.
+- `getSite()` and `getRedirects()` are cached in memory for a minute, so a locale added in Brease is served without a restart. The revalidate route (`revalidateHandler`) clears that cache on a publish, but only in the server instance that received the call; other instances (serverless functions, edge regions) catch up within the minute. The editor's preview (`BREASE_PREVIEW=1`) never caches it.
+- `getRelease()` throws a `BreaseError` with status 404 until the site's first release is published: there is no release to report yet.
 - `buildPath(settings, slug, locale)` and `resolvePath(settings, pathname)` are exported for routing code that already has the site settings.
 
 ## Next.js (App Router)
@@ -94,7 +96,13 @@ async function load(params: Props['params']) {
 }
 
 export async function generateStaticParams() {
-  return (await brease.routes()).map((r) => ({ slug: r.path })) // published pages, without site-wide "_" pages
+  // The build goes on without pre-rendered pages if the content API has a hiccup; pages then render on first request.
+  try {
+    return (await brease.routes()).map((r) => ({ slug: r.path })) // published pages, without site-wide "_" pages
+  } catch (err) {
+    console.warn(`Brease pages unavailable at build time: ${(err as Error).message}`)
+    return []
+  }
 }
 
 export async function generateMetadata({ params }: Props) {
@@ -283,7 +291,14 @@ async function load(params: Props['params']) {
   return page && route && Template ? { page, locale: route.locale, Template } : null
 }
 
-export const generateStaticParams = () => brease.routes()
+export async function generateStaticParams() {
+  try {
+    return await brease.routes()
+  } catch (err) {
+    console.warn(`Brease pages unavailable at build time: ${(err as Error).message}`)
+    return []
+  }
+}
 
 export async function generateMetadata({ params }: Props) {
   const loaded = await load(params)
@@ -327,15 +342,28 @@ Requests older than five minutes are rejected. The handler calls `revalidatePath
 
 ## Astro
 
+```ts
+// src/lib/brease.ts
+import { createBrease } from 'brease-client'
+
+export const brease = createBrease({ token: import.meta.env.BREASE_TOKEN, apiUrl: import.meta.env.BREASE_API_URL })
+```
+
 ```astro
 ---
-import { createBrease } from 'brease-client'
+// src/pages/[...path].astro
 import { breaseHead } from 'brease-client/astro'
+import { brease } from '../lib/brease'
 
-const brease = createBrease({ token: import.meta.env.BREASE_TOKEN, apiUrl: import.meta.env.BREASE_API_URL })
-const target = await brease.resolve(Astro.url.pathname)
-const page = target && (await brease.getPage(target.slug, { locale: target.locale }))
-if (!page) return Astro.redirect('/404')
+// Static output builds one file per published page in every locale. getStaticPaths can only use imports, so the
+// client lives in its own module.
+export async function getStaticPaths() {
+  return (await brease.routes()).map(({ path }) => ({ params: { path: path.join('/') || undefined } }))
+}
+
+const route = await brease.route(Astro.params.path)
+const page = route && (await brease.getPage(route.slug, { locale: route.locale }))
+if (!page) return new Response(null, { status: 404 })
 ---
 <html lang={page.locale}>
   <head><Fragment set:html={breaseHead(page.resolvedSeo)} /></head>
@@ -442,7 +470,7 @@ curl -H "Authorization: Bearer $BREASE_TOKEN" "https://api.brease.io/content-api
 | `GET /content-api/page` | `slug`, `locale` | one page (below); 404 when missing or hidden |
 | `GET /content-api/navigations/:key` | `locale` | `{ key, locale, items: [{ id, label, url, pageId?, target?, children }] }` |
 | `GET /content-api/redirects` | | `[{ source, destination, status }]` |
-| `GET /content-api/release` | | `{ id, number, commitSha, liveAt }` of the release served |
+| `GET /content-api/release` | | `{ id, number, commitSha, liveAt }` of the release served; 404 before the first publish |
 | `GET /content-api/openapi.json` | | the OpenAPI document |
 
 A page:
