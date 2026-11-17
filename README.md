@@ -10,7 +10,7 @@ Set these environment variables (Brease writes them into your Vercel or Cloudfla
 
 | Variable | Purpose |
 | --- | --- |
-| `BREASE_TOKEN` | Read-only delivery token (`brs_live_…`). It identifies the site. Keep it on the server: anyone holding it can also read unpublished draft content of a known commit or draft branch. |
+| `BREASE_TOKEN` | Read-only delivery token (`brs_live_…`). It identifies the site. Brease writes two: a production token for production builds, which reads only published content, and a preview token for preview and development, which also reads the draft content of a known commit or draft branch. Keep both on the server. |
 | `BREASE_API_URL` | Optional. Defaults to `https://api.brease.io`. Inside a Brease sandbox it points at the local content server. |
 | `BREASE_REVALIDATE_SECRET` | ISR/SSR sites only: secret for the revalidate route. |
 
@@ -59,7 +59,7 @@ await brease.sitemap(site.url) // [{ url, alternates }]: pages search may show
 
 - `null` means 404. Every other failure throws a `BreaseError` with `status`, `code`, `requestId` and `details`.
 - 429 and 5xx responses (and network errors) are retried twice with backoff; `Retry-After` is honoured.
-- Commit pinning: the `x-brease-commit` header is sent from the commit the host is building (`VERCEL_GIT_COMMIT_SHA` on Vercel, `WORKERS_CI_COMMIT_SHA` on Cloudflare Workers Builds, `CF_PAGES_COMMIT_SHA` on Cloudflare Pages), so every deployment reads the content release that was built and tested with its code. On a Brease draft branch the `x-brease-branch` header (from the same host's `VERCEL_GIT_COMMIT_REF`, `WORKERS_CI_BRANCH` or `CF_PAGES_BRANCH`) lets later commits there, such as a developer's fix, still read the draft's content. These are build-time variables: pages rendered at request time on Cloudflare read the live release unless you pass `commit` yourself.
+- Commit pinning: the `x-brease-commit` header is sent from the commit the host is building (`VERCEL_GIT_COMMIT_SHA` on Vercel, `WORKERS_CI_COMMIT_SHA` on Cloudflare Workers Builds, `CF_PAGES_COMMIT_SHA` on Cloudflare Pages), so every deployment reads the content release that was built and tested with its code. On a Brease draft branch the `x-brease-branch` header (from the same host's `VERCEL_GIT_COMMIT_REF`, `WORKERS_CI_BRANCH` or `CF_PAGES_BRANCH`) lets later commits there, such as a developer's fix, still read the draft's content. Drafts need a preview token: with a production token a draft's commit or branch reads the live release. These are build-time variables: pages rendered at request time on Cloudflare read the live release unless you pass `commit` yourself.
 - `sitemap()` lists only pages search may show: not hidden, not kept out of search (`index: false`, the page's "Show in search results" switch), and no site-wide `_` pages. It has no `lastModified`: releases are immutable snapshots and do not track per-page edit times.
 - `getPages({ parentId, template, withContent })` narrows the list to a page's children or one template, and with
   `withContent` adds each page's content (one locale, hidden pages left out, up to 100 pages): build news, team or
