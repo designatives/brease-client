@@ -1,9 +1,17 @@
-import { cpSync, existsSync, mkdtempSync, readFileSync } from 'node:fs'
+import {
+  appendFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Brease } from './index'
-import { build, exportContent, navigationKeys, serve, vercelSource } from './static-build'
+import { build, exportContent, navigationKeys, serve, vercelSource, writeHostOutput } from './static-build'
 import { renderTemplate } from './template'
 import type { Navigation, Page, Redirect } from './types'
 
@@ -163,6 +171,61 @@ describe('brease-client build', () => {
     expect(existsSync(join(root, '.vercel', 'output', 'static', 'de', 'index.html'))).toBe(true)
   })
 
+  it('publishes only the site files: never secrets, sources or configs of the old site', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'brease-static-'))
+    cpSync(STARTER, root, { recursive: true })
+    const secrets: Record<string, string> = {
+      '.env': 'TOKEN=1',
+      '.npmrc': '//registry/:_authToken=x',
+      '.dev.vars': 'SECRET=1',
+      'config.php': '<?php $db = "pw";',
+      'hugo.toml': 'baseURL = "/"',
+      'content/post.md': '# Draft',
+      'gulpfile.js': 'module.exports = {}',
+      'img/.hidden.png': 'x',
+      'banner.png': 'png',
+      'unused.png': 'png'
+    }
+    for (const [name, body] of Object.entries(secrets)) {
+      mkdirSync(join(root, name, '..'), { recursive: true })
+      writeFileSync(join(root, name), body)
+    }
+    appendFileSync(join(root, 'templates', 'home.html'), '<img src="/banner.png">')
+    const { out: dist } = await build(fake, { root, host: null })
+    for (const name of [
+      '.env',
+      '.npmrc',
+      '.dev.vars',
+      'config.php',
+      'hugo.toml',
+      'content/post.md',
+      'gulpfile.js',
+      'img/.hidden.png',
+      'unused.png'
+    ])
+      expect(existsSync(join(dist, name)), name).toBe(false)
+    expect(existsSync(join(dist, 'banner.png'))).toBe(true)
+    expect(existsSync(join(dist, 'css', 'site.css'))).toBe(true)
+
+    const server = serve(fake, { root, port: 0 })
+    await new Promise((r) => server.once('listening', r))
+    const port = (server.address() as { port: number }).port
+    try {
+      for (const path of [
+        '/.env',
+        '/config.php',
+        '/hugo.toml',
+        '/content/post.md',
+        '/gulpfile.js',
+        '/unused.png'
+      ])
+        expect((await fetch(`http://127.0.0.1:${port}${path}`)).status, path).not.toBe(200)
+      expect((await fetch(`http://127.0.0.1:${port}/banner.png`)).status).toBe(200)
+    } finally {
+      server.close()
+    }
+  })
+
   it('serves pages rendered per request, the site files and redirects', async () => {
     const server = serve(fake, { root: STARTER, port: 0 })
     await new Promise((r) => server.once('listening', r))
@@ -187,6 +250,48 @@ describe('brease-client build', () => {
       'footer'
     ])
     expect(vercelSource('/docs/:rest*')).toBe('/docs/(?<rest>.*)')
+  })
+})
+
+describe('host output', () => {
+  it("keeps the site's own vercel.json rules and serves index.html for unknown paths in an SPA", async () => {
+    const root = mkdtempSync(join(tmpdir(), 'brease-host-'))
+    const out = join(root, 'dist')
+    mkdirSync(out)
+    writeFileSync(join(out, 'index.html'), '<html></html>')
+    writeFileSync(
+      join(root, 'vercel.json'),
+      JSON.stringify({
+        redirects: [{ source: '/old', destination: '/new', permanent: true }],
+        rewrites: [{ source: '/api/:path*', destination: 'https://api.example.com/:path*' }],
+        headers: [{ source: '/(.*)', headers: [{ key: 'X-Frame-Options', value: 'DENY' }] }]
+      })
+    )
+    await writeHostOutput(
+      [{ source: '/a.html', destination: '/a', status: 301 } as Redirect],
+      out,
+      'vercel',
+      {
+        spa: true
+      }
+    )
+    const { routes } = JSON.parse(readFileSync(join(root, '.vercel', 'output', 'config.json'), 'utf8'))
+    expect(
+      routes.some((r: { headers?: Record<string, string> }) => r.headers?.['X-Frame-Options'] === 'DENY')
+    ).toBe(true)
+    expect(
+      routes.some(
+        (r: { status?: number; headers?: { Location?: string } }) =>
+          r.status === 308 && r.headers?.Location === '/new'
+      )
+    ).toBe(true)
+    expect(routes.some((r: { headers?: { Location?: string } }) => r.headers?.Location === '/a')).toBe(true)
+    const fs = routes.findIndex((r: { handle?: string }) => r.handle === 'filesystem')
+    expect(
+      routes.findIndex((r: { dest?: string }) => r.dest === 'https://api.example.com/$path')
+    ).toBeGreaterThan(fs)
+    expect(routes.at(-1)).toEqual({ src: '/(.*)', dest: '/index.html' })
+    expect(readFileSync(join(out, '_redirects'), 'utf8')).toContain('/* /index.html 200')
   })
 })
 

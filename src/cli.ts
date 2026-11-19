@@ -38,7 +38,8 @@ const USAGE = `Usage:
   brease-client check                  the sections convention
   brease-client build [--out dist]     render every page from templates/ into dist/ (sites without a framework)
   brease-client serve                  the same pages, rendered per request on $PORT (the editor's preview)
-  brease-client output <dir>           write Brease's redirects for the host next to built files in <dir>
+  brease-client output <dir> [--spa]   write Brease's redirects for the host next to built files in <dir>
+                                       (--spa: unknown paths serve index.html, for browser-only apps)
   brease-client content <file.json> [--nav main,footer] [--watch]
                                        the content a browser-only app imports at build time`
 
@@ -78,7 +79,9 @@ async function main() {
     return
   }
   if (command === 'output' && args[0]) {
-    await writeHostOutput(await createBrease().getRedirects(), join(process.cwd(), args[0]), detectHost())
+    await writeHostOutput(await createBrease().getRedirects(), join(process.cwd(), args[0]), detectHost(), {
+      spa: args.includes('--spa')
+    })
     return
   }
   if (command === 'content' && args[0]) {

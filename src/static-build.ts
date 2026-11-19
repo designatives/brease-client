@@ -23,27 +23,111 @@ import type { Navigation, Page, Redirect } from './types'
 // content a browser-only app (a Vite SPA) reads at build time.
 
 export const TEMPLATES_DIR = 'templates'
-const NOT_ASSETS = new Set([
+
+// What build copies and serve serves besides the rendered pages. Only an allow-list goes out: the site's asset
+// folders, and anything else only when a template (or a stylesheet it uses) references it. Never dotfiles
+// (.env, .npmrc, .dev.vars), sources and configs of the old site (PHP, Markdown, YAML/TOML, lockfiles) or
+// Brease's own folders.
+const ASSET_DIRS = new Set(['public', 'static', 'assets', 'images', 'img', 'css', 'js', 'fonts', 'media'])
+const NEVER_DIRS = new Set([
   TEMPLATES_DIR,
   'dist',
   'node_modules',
   'scripts',
-  '.brease',
   'brease-seed',
-  '.git',
-  '.vercel',
-  '.github',
-  'package.json',
-  'package-lock.json',
-  'pnpm-lock.yaml',
-  'yarn.lock',
-  'bun.lock',
-  'BREASE.md',
-  'README.md',
-  'vercel.json',
-  'wrangler.toml',
-  'wrangler.jsonc'
+  'vendor',
+  'content',
+  'layouts',
+  'archetypes',
+  'data',
+  '_data',
+  '_includes',
+  '_layouts',
+  '_posts',
+  '_drafts',
+  '_site',
+  'src'
 ])
+const ASSET_EXT = new Set([
+  '.css',
+  '.js',
+  '.mjs',
+  '.map',
+  '.svg',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+  '.avif',
+  '.gif',
+  '.ico',
+  '.bmp',
+  '.woff',
+  '.woff2',
+  '.ttf',
+  '.otf',
+  '.eot',
+  '.pdf',
+  '.mp4',
+  '.webm',
+  '.mp3',
+  '.ogg',
+  '.wav',
+  '.txt',
+  '.webmanifest',
+  '.vtt'
+])
+const REFERENCE =
+  /(?:\b(?:src|href|poster|data-src)\s*=\s*["']([^"']+)["']|url\(\s*["']?([^"')]+)["']?\s*\))/gi
+
+// Paths (relative to the root, forward slashes) a piece of HTML or CSS at `fromDir` refers to on this site.
+function references(text: string, fromDir: string) {
+  const out: string[] = []
+  const add = (raw: string) => {
+    const clean = raw.trim().split(/[?#]/)[0] ?? ''
+    if (!clean || /^[a-z][a-z0-9+.-]*:/i.test(clean) || clean.startsWith('//')) return
+    const rel = clean.startsWith('/') ? clean.slice(1) : join(fromDir, clean)
+    out.push(rel.split(/[\\/]+/).join('/'))
+  }
+  for (const m of text.matchAll(REFERENCE)) add((m[1] ?? m[2]) as string)
+  for (const m of text.matchAll(/\bsrcset\s*=\s*["']([^"']+)["']/gi))
+    for (const part of (m[1] as string).split(',')) add(part.trim().split(/\s+/)[0] ?? '')
+  return out
+}
+
+function readText(file: string) {
+  try {
+    return readFileSync(file, 'utf8')
+  } catch {
+    return ''
+  }
+}
+
+// Every file the templates reference, and what their stylesheets reference in turn (fonts, background images).
+export function referencedAssets(root: string) {
+  const found = new Set<string>()
+  const dir = join(root, TEMPLATES_DIR)
+  const queue: string[] = []
+  if (existsSync(dir))
+    for (const name of readdirSync(dir))
+      if (name.endsWith('.html')) queue.push(...references(readText(join(dir, name)), ''))
+  while (queue.length) {
+    const rel = queue.shift() as string
+    if (found.has(rel)) continue
+    found.add(rel)
+    if (rel.endsWith('.css')) queue.push(...references(readText(join(root, rel)), dirname(rel)))
+  }
+  return found
+}
+
+// Whether a file (relative to the root, forward slashes) may be published as one of the site's files.
+export function isPublicAsset(rel: string, referenced: Set<string>) {
+  const parts = rel.split('/').filter(Boolean)
+  if (!parts.length || parts.some((p) => p.startsWith('.') || p === '..')) return false
+  if (NEVER_DIRS.has(parts[0] as string)) return false
+  if (!ASSET_EXT.has(extname(rel).toLowerCase())) return false
+  return ASSET_DIRS.has(parts[0] as string) || referenced.has(parts.join('/'))
+}
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -114,11 +198,21 @@ async function renderPage(brease: Brease, root: string, slug: string, locale: st
 const outFile = (out: string, path: string[]) => join(out, ...path, 'index.html')
 
 function copyAssets(root: string, out: string) {
-  for (const name of readdirSync(root)) {
-    if (NOT_ASSETS.has(name) || name.startsWith('.env')) continue
-    if (name.endsWith('.html') && statSync(join(root, name)).isFile()) continue
-    cpSync(join(root, name), join(out, name), { recursive: true })
+  const referenced = referencedAssets(root)
+  const walk = (rel: string) => {
+    for (const name of readdirSync(join(root, rel))) {
+      if (name.startsWith('.')) continue
+      const child = rel ? `${rel}/${name}` : name
+      if (!rel && NEVER_DIRS.has(name)) continue
+      const full = join(root, child)
+      if (statSync(full).isDirectory()) walk(child)
+      else if (isPublicAsset(child, referenced)) {
+        mkdirSync(dirname(join(out, child)), { recursive: true })
+        cpSync(full, join(out, child))
+      }
+    }
   }
+  walk('')
 }
 
 export async function build(brease: Brease, opts: { root?: string; out?: string; host?: Host } = {}) {
@@ -147,24 +241,72 @@ export type Host = 'vercel' | 'cloudflare' | null
 export const detectHost = (): Host =>
   process.env.VERCEL ? 'vercel' : process.env.CF_PAGES || process.env.WORKERS_CI ? 'cloudflare' : null
 
+type VercelJson = {
+  redirects?: { source: string; destination: string; permanent?: boolean; statusCode?: number }[]
+  rewrites?: { source: string; destination: string }[]
+  headers?: { source: string; headers: { key: string; value: string }[] }[]
+}
+
+const vercelDest = (destination: string) => destination.replace(/:(\w+)\*?/g, '$$$1')
+const vercelRoute = (source: string) => `^${vercelSource(source)}/?$`
+
+// The site's own vercel.json rules as Build Output routes: Build Output replaces vercel.json, so they'd be lost.
+export function vercelJsonRoutes(file: string) {
+  if (!existsSync(file)) return { before: [], after: [] }
+  const cfg = JSON.parse(readFileSync(file, 'utf8')) as VercelJson
+  const headers = (cfg.headers ?? []).map((h) => ({
+    src: vercelRoute(h.source),
+    headers: Object.fromEntries(h.headers.map((x) => [x.key, x.value])),
+    continue: true
+  }))
+  const redirects = (cfg.redirects ?? []).map((r) => ({
+    src: vercelRoute(r.source),
+    headers: { Location: vercelDest(r.destination) },
+    status: r.statusCode ?? (r.permanent === false ? 307 : 308)
+  }))
+  const rewrites = (cfg.rewrites ?? []).map((r) => ({
+    src: vercelRoute(r.source),
+    dest: vercelDest(r.destination)
+  }))
+  return { before: [...headers, ...redirects], after: rewrites }
+}
+
 // _redirects (Cloudflare, Netlify) always sits beside the files; on Vercel the build also writes Vercel's Build
-// Output (.vercel/output), which carries the redirects as routes and serves the same files.
-export async function writeHostOutput(redirects: Redirect[], out: string, host: Host) {
+// Output (.vercel/output), which carries the redirects as routes, keeps the site's own vercel.json rules and
+// serves the same files. `spa`: every unknown path gets index.html, so deep links into a browser-only app work.
+export async function writeHostOutput(
+  redirects: Redirect[],
+  out: string,
+  host: Host,
+  opts: { spa?: boolean } = {}
+) {
   const lines = redirects.map((r) => `${r.source} ${r.destination} ${r.status}`)
+  if (opts.spa) lines.push('/* /index.html 200')
   writeFileSync(join(out, '_redirects'), lines.length ? `${lines.join('\n')}\n` : '')
   if (host !== 'vercel') return
-  const vercel = join(dirname(out), '.vercel', 'output')
+  const root = dirname(out)
+  const vercel = join(root, '.vercel', 'output')
   rmSync(vercel, { recursive: true, force: true })
   mkdirSync(vercel, { recursive: true })
   cpSync(out, join(vercel, 'static'), { recursive: true })
+  const own = vercelJsonRoutes(join(root, 'vercel.json'))
   const routes = redirects.map((r) => ({
-    src: `^${vercelSource(r.source)}/?$`,
-    headers: { Location: r.destination.replace(/:(\w+)\*?/g, '$$$1') },
+    src: vercelRoute(r.source),
+    headers: { Location: vercelDest(r.destination) },
     status: r.status
   }))
+  const fallback = opts.spa
+    ? [{ src: '/(.*)', dest: '/index.html' }]
+    : existsSync(join(out, '404.html'))
+      ? [{ handle: 'error' }, { src: '/(.*)', dest: '/404.html', status: 404 }]
+      : []
   writeFileSync(
     join(vercel, 'config.json'),
-    JSON.stringify({ version: 3, routes: [...routes, { handle: 'filesystem' }] }, null, 2)
+    JSON.stringify(
+      { version: 3, routes: [...own.before, ...routes, { handle: 'filesystem' }, ...own.after, ...fallback] },
+      null,
+      2
+    )
   )
 }
 
@@ -190,14 +332,14 @@ export function serve(brease: Brease, opts: { root?: string; port?: number } = {
       const url = new URL(req.url ?? '/', 'http://localhost')
       const pathname = decodeURIComponent(url.pathname)
       const asset = join(root, pathname)
-      const inRoot = !relative(root, asset).startsWith('..')
-      const top = pathname.split('/')[1] ?? ''
+      const rel = relative(root, asset)
+        .split(/[\\/]+/)
+        .join('/')
       if (
-        inRoot &&
-        !NOT_ASSETS.has(top) &&
+        !rel.startsWith('..') &&
+        isPublicAsset(rel, referencedAssets(root)) &&
         existsSync(asset) &&
-        statSync(asset).isFile() &&
-        !asset.endsWith('.html')
+        statSync(asset).isFile()
       ) {
         res.writeHead(200, {
           'content-type': MIME[extname(asset).toLowerCase()] ?? 'application/octet-stream'
