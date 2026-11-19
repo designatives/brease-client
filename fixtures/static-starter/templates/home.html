@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- brease:head -->
+    <link rel="stylesheet" href="/css/site.css" />
+    <script src="/js/app.js" defer></script>
+  </head>
+  <body>
+    <header data-brease-block="Header">
+      <img src="/img/logo.svg" alt="Starter" class="logo" />
+      <nav data-brease="nav:main">
+        <a data-brease-item href="/">Home</a>
+      </nav>
+    </header>
+    <main>
+      <section class="hero" data-brease-block="Hero" data-brease="hero.background">
+        <h1 data-brease="hero.title">Welcome</h1>
+        <p class="lead" data-brease="hero.intro">Text written in the original page.</p>
+        <img class="photo" data-brease="hero.image" src="/img/old.jpg" srcset="/img/old-2x.jpg 2x" alt="" />
+        <a class="cta" data-brease="hero.cta" href="/about">Read more</a>
+      </section>
+      <ul class="rooms" data-brease="rooms">
+        <li data-brease-item class="room">
+          <h2 data-brease="rooms.0.name">Room</h2>
+          <p data-brease="rooms.0.text">Description</p>
+        </li>
+      </ul>
+    </main>
+    <footer data-brease-block="Footer">
+      <p data-brease="_global:footer.copyright">© Starter</p>
+    </footer>
+  </body>
+</html>

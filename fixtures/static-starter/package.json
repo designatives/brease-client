@@ -1,0 +1,12 @@
+{
+  "name": "brease-static-starter",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "brease-client build",
+    "dev": "brease-client serve"
+  },
+  "dependencies": {
+    "brease-client": "^0.9.0"
+  }
+}

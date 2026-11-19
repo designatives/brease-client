@@ -18,6 +18,7 @@ export {
   verifySignature
 } from './signature'
 export { type JsonLd, jsonLd, jsonLdHtml } from './structured-data'
+export { renderTemplate, type TemplateData } from './template'
 export type * from './types'
 export { buildPath, canonicalPath, normalizeSlug, resolvePath } from './urls'
 

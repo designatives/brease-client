@@ -373,15 +373,76 @@ if (!page) return new Response(null, { status: 404 })
 
 `headTagList(seo)` returns the same tags as structured `{ tag, attrs, content }` objects.
 
-## Plain HTML / other servers
+## Static HTML sites (no framework)
 
-```ts
-import { headTags } from 'brease-client/html'
+A site made of hand-written HTML pages gets its content from Brease at build time, with its markup, CSS, scripts and
+animations untouched. Move each kind of page into `templates/`, mark the content in it, and let `brease-client` build
+the site:
 
-const html = `<head>${headTags(page.resolvedSeo, { xDefault: 'https://example.com/' })}</head>`
+```
+templates/
+  home.html       the home page (slug "")
+  page.html       every other page, unless a page names its own template
+  room.html       pages whose content has "template": "room"
+css/ js/ img/     the site's own files, copied as they are
+package.json      "build": "brease-client build", "dev": "brease-client serve"
 ```
 
-`customHead` and `customCode` from the site's SEO settings are inserted as raw HTML (they are authored by the site's team); pass `{ includeCustom: false }` to leave them out.
+```html
+<head>
+  <meta charset="utf-8" />
+  <!-- brease:head -->  <!-- the page's title, meta, canonical, hreflang, structured data and custom code -->
+  <link rel="stylesheet" href="/css/site.css" />
+</head>
+<body>
+  <nav data-brease="nav:main"><a data-brease-item href="/">Home</a></nav>
+  <h1 data-brease="hero.title">Welcome</h1>
+  <div data-brease="hero.text" data-brease-html><p>Rich text</p></div>
+  <img data-brease="hero.image" src="/img/hero.jpg" alt="" />
+  <a data-brease="hero.cta" href="/contact">Contact us</a>
+  <ul data-brease="rooms">
+    <li data-brease-item><h2 data-brease="rooms.0.name">Room</h2></li>
+  </ul>
+  <p data-brease="_global:footer.copyright">© 2026</p>
+</body>
+```
+
+- `brease-client build` renders every published page in every locale to `dist/<url>/index.html`, copies the site's other files beside them, and writes Brease's redirects: `dist/_redirects` (Cloudflare) and, on Vercel, Vercel's Build Output (`.vercel/output`). Set the host's output directory to `dist`.
+- `brease-client serve` renders each request as it comes in (on `$PORT`): the editor's preview shows an edit after a reload, without a rebuild.
+- The `data-brease` markers both place the content and tell the editor what is editable, so they stay in the output. A field with no value keeps the template's own markup.
+- Text: the element's text becomes the field (rich text keeps its HTML; mark it `data-brease-html`). Images: on `<img>` the `src`, `alt`, `width` and `height`; on other elements the background image. Links: on `<a>` the `href`, and the label where the link has no child elements.
+- Lists and menus: the child marked `data-brease-item` repeats per item; its markers are written for the first item (`rooms.0.name`) and renumbered for the rest. In a menu (`nav:<key>`), the item's `<a>` gets the menu item's address and label (or the elements marked `data-brease-label` get the label).
+- `_global:<path>` reads the site-wide page; the output carries that page's id, as the editor expects.
+- New content goes live when Brease rebuilds the site after a publish.
+
+`renderTemplate(html, { page, global, navigations })` (root export) does the filling, for other build setups.
+`headTags(seo)` from `brease-client/html` returns the head tags alone.
+
+## Single-page apps (Vite, React without a server)
+
+An app that renders in the browser reads its content at build time, so no token reaches the browser:
+
+```json
+{
+  "scripts": {
+    "dev": "brease-client content src/brease/content.json --nav main,footer --watch & vite",
+    "build": "brease-client content src/brease/content.json --nav main,footer && vite build && brease-client output dist"
+  }
+}
+```
+
+```ts
+import content from './brease/content.json'
+
+const page = content.pages[locale]?.[slug] // the same page object getPage() returns
+const menu = content.navigations[locale]?.main
+const global = content.global[locale]
+```
+
+- `content.json` holds `{ site, pages: { <locale>: { <slug>: page } }, navigations, global, redirects }`. `--watch` rewrites it while the editor's preview runs, so the dev server shows edits.
+- Mark elements with `data-brease` as in every other framework (see Editor markers).
+- `brease-client output dist` writes the redirects for the host (`dist/_redirects`, or Vercel's Build Output on Vercel). Keep the SPA's own fallback to `index.html`.
+- New content goes live when Brease rebuilds the site after a publish.
 
 ## Editor markers
 
