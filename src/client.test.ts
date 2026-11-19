@@ -221,6 +221,8 @@ describe('catch-all route', () => {
     expect(await b.route(undefined)).toEqual({ slug: '', locale: 'hu' })
     expect(await b.route(['en'])).toEqual({ slug: '', locale: 'en' })
     expect(await b.route(['en', 'a%20b', 'c'])).toEqual({ slug: 'a b/c', locale: 'en' })
+    expect(await b.route('/en/a%20b/c')).toEqual({ slug: 'a b/c', locale: 'en' })
+    expect(await b.route('//en')).toEqual({ slug: '', locale: 'en' })
     expect(await b.route(['rolunk'])).toEqual({ slug: 'rolunk', locale: 'hu' })
     expect(await b.route(['_global'])).toBeNull()
     expect(await b.route(['%E0%A4'])).toEqual({ slug: '%E0%A4', locale: 'hu' })
