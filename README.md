@@ -444,6 +444,36 @@ const global = content.global[locale]
 - `brease-client output dist` writes the redirects for the host (`dist/_redirects`, or Vercel's Build Output on Vercel). Keep the SPA's own fallback to `index.html`.
 - New content goes live when Brease rebuilds the site after a publish.
 
+## Other frameworks
+
+Every site reads its content the same way: `createBrease()` on the server or at build time (never in the browser,
+where the token would be public), `route()` and `getPage()` for the page of a URL, `routes()` to list every page in
+every locale, `matchRedirect()` for redirects on servers that answer each request. Per framework:
+
+- **SvelteKit**: a rest route `src/routes/[...path]/+page.server.ts` whose `load` calls `brease.route(params.path)` and
+  `getPage`, returns `headTags(page.resolvedSeo)` for `<svelte:head>`, and redirects with `matchRedirect`. With
+  `adapter-static`, export `entries` from `brease.routes()` so every page prerenders.
+- **Nuxt 3**: a server route (`server/api/brease/page.get.ts`) reads the page in Nitro, `pages/[...slug].vue` loads it
+  with `useFetch`, and a server middleware applies `matchRedirect` with `sendRedirect`.
+- **React Router v7 / Remix**: the splat route `app/routes/$.tsx` reads the page in its `loader` (a `.server.ts`
+  module holds the client), `meta` maps `headTagList(page.resolvedSeo)`.
+- **SolidStart**: a catch-all route reads the page through a `query` with `"use server"`.
+- **Qwik City**: `routeLoader$` in `src/routes/[...path]/index.tsx`, `head` from the page's SEO.
+- **Gatsby**: `createPages` in `gatsby-node.ts` creates a page per `routes()` entry with the page in its context, and
+  `createRedirect` for each redirect; the template's `Head` maps `headTagList`.
+- **Eleventy**: a global data file (`_data/brease.js`) returns every page with `headTags`, and one template paginates
+  over it with `permalink: "{{ item.page.url }}"`.
+- **Angular, Create React App, Vue CLI, webpack apps**: like Vite single-page apps, `brease-client content` writes
+  the content JSON before every serve and build (npm `pre` scripts), and `brease-client output <dir>` writes the host's
+  redirects after the build.
+- **Node servers (Express, Hono, Fastify, Koa)**: a middleware applies `matchRedirect`, one catch-all route reads the
+  page per request and renders it with the site's own templates and `headTags`.
+- **Any other JavaScript framework**: find where it loads data on the server or at build time and read Brease there;
+  a client-only app uses `brease-client content`.
+- **Sites not built with JavaScript (Hugo, Jekyll, Hexo, PHP, other server templates)**: they become static sites
+  built from Brease. Their rendered HTML becomes the templates (see Static HTML sites), `brease-client build`
+  replaces the old generator's build, and the content moves from Markdown and data files into Brease.
+
 ## Editor markers
 
 The Brease editor's Edit tool finds content through `data-brease` attributes:
