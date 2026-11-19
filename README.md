@@ -536,7 +536,7 @@ const props = imageProps(page.content.hero.image)
 
 An image field is `{ assetId, url, alt, width?, height? }` (`BreaseImage`); `imageProps` takes the field or a plain
 URL. Brease files are served as-is from storage, which doesn't resize images: the helpers return the URL unchanged,
-without `srcSet` or `sizes` (`srcset()` and the resize options are deprecated no-ops). For responsive images, let your framework resize them, e.g. `next/image` with the host of
+without `srcSet` or `sizes` (the resize options are ignored). For responsive images, let your framework resize them, e.g. `next/image` with the host of
 your Brease image URLs in `images.remotePatterns`.
 
 ## Content links

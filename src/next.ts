@@ -112,6 +112,3 @@ export function breaseRedirects(client: Pick<Brease, 'getRedirects'> = createBre
     }
   }
 }
-
-// Kept here for older imports; they live in the root export now.
-export { hmacHex, verifySignature } from './signature'

@@ -3,12 +3,12 @@ import { ga4Html, ga4Tag, grantAnalytics } from './analytics'
 import { breaseHead } from './astro'
 import { customTags } from './custom-code'
 import { headTagList, headTags } from './html'
-import { imageProps, imageUrl, srcset } from './image'
+import { imageProps, imageUrl } from './image'
 import { fieldPath, navPath } from './markers'
-import { hmacHex, revalidateHandler, toMetadata } from './next'
+import { revalidateHandler, toMetadata } from './next'
 import { matchRedirect } from './redirects'
 import { checkSections, sectionAttrs } from './sections'
-import { verifyRevalidate } from './signature'
+import { hmacHex, verifyRevalidate } from './signature'
 import { jsonLd, jsonLdHtml } from './structured-data'
 import type { ResolvedSeo } from './types'
 import { canonicalPath } from './urls'
@@ -132,7 +132,6 @@ describe('image', () => {
   it('passes bucket URLs through, leaving resizing to the site', () => {
     const src = 'https://bucket.fsn1.your-objectstorage.com/site_1/ast_1/hero.jpg'
     expect(imageUrl(src, { width: 640 })).toBe(src)
-    expect(srcset(src)).toBe('')
     expect(imageProps(src, { sizes: '50vw' })).toEqual({ src })
   })
 })
