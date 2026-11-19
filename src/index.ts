@@ -219,7 +219,9 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
     async route(path) {
       // resolve() decodes the path once.
       // A request path ("/de/about") or its segments; leading and doubled slashes don't change the page.
-      const joined = (Array.isArray(path) ? path.join('/') : (path ?? '')).replace(/^\/+/, '').replace(/\/{2,}/g, '/')
+      const joined = (Array.isArray(path) ? path.join('/') : (path ?? ''))
+        .replace(/^\/+/, '')
+        .replace(/\/{2,}/g, '/')
       const result = await client.resolve(`/${joined}`)
       return result && !result.slug.split('/').some((part) => part.startsWith('_')) ? result : null
     },
