@@ -30,6 +30,8 @@ export type LocaleContext = {
   // The home page's path in each locale that has one: where a locale switcher goes when the page itself has
   // no version in that locale. Locales in neither have no content yet.
   homes: Record<string, string>
+  // Locales the page is left out of on purpose: a switcher leaves them out rather than linking their home page.
+  excluded?: string[]
 }
 
 export type BreaseOptions = {
@@ -251,7 +253,8 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
       for (const [locale, url] of Object.entries(page?.alternates ?? {})) alternates[locale] = pathOf(url)
       const homes: Record<string, string> = {}
       for (const [locale, url] of Object.entries(home?.alternates ?? {})) homes[locale] = pathOf(url)
-      return { locale: target.locale, settings, alternates, homes }
+      const excluded = page?.excludedLocales ?? []
+      return { locale: target.locale, settings, alternates, homes, ...(excluded.length ? { excluded } : {}) }
     },
     async sitemap(baseUrl) {
       const base = baseUrl.replace(/\/+$/, '')

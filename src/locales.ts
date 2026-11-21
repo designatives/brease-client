@@ -5,10 +5,12 @@ import { buildPath } from './urls'
 export type LocaleLink = { locale: string; label: string; href: string; current: boolean }
 
 // What a locale switcher shows, in any framework: one link per locale that has content, to the same page
-// there, else to that locale's home page. A locale with neither (added, not translated yet) is left out.
+// there, else to that locale's home page. A locale with neither (added, not translated yet), or one the page is
+// left out of on purpose, is left out.
 export function localeLinks(context: LocaleContext): LocaleLink[] {
-  const { settings, alternates, homes, locale: current } = context
+  const { settings, alternates, homes, locale: current, excluded = [] } = context
   return settings.locales.flatMap((l) => {
+    if (l !== current && excluded.includes(l)) return []
     const href = alternates[l] ?? homes[l] ?? (l === current ? buildPath(settings, '', l) : null)
     return href ? [{ locale: l, label: nativeName(l), href, current: l === current }] : []
   })

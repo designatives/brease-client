@@ -30,6 +30,21 @@ describe('locale links', () => {
     ])
   })
 
+  it('leaves out the locales the page is left out of on purpose, instead of linking their home', () => {
+    expect(
+      localeLinks({
+        locale: 'hu',
+        settings,
+        alternates: { hu: '/allasok' },
+        homes: { hu: '/', en: '/en', de: '/de' },
+        excluded: ['en']
+      })
+    ).toEqual([
+      { locale: 'hu', label: 'Magyar', href: '/allasok', current: true },
+      { locale: 'de', label: 'Deutsch', href: '/de', current: false }
+    ])
+  })
+
   it('names locales in their own language and builds paths', () => {
     expect(nativeName('pt-BR')).toBe('Português (Brasil)')
     expect(localeHref(settings, 'about', 'en')).toBe('/en/about')

@@ -325,7 +325,7 @@ localeHref(context.settings, 'about', 'de') // '/de/about'
 
 A locale switcher is then a few lines in any framework: a list of `<a href={l.href} hreflang={l.locale}>{l.label}</a>`, with `aria-current` on the current one, hidden while `localeLinks()` returns fewer than two links. Share `context` with the components that need it the framework's own way (a React context, Astro props, a template variable).
 
-- `localeLinks()` links each locale's version of the current page, else that locale's home page; locales without content yet are left out.
+- `localeLinks()` links each locale's version of the current page, else that locale's home page; locales without content yet are left out, and so are locales the page is left out of on purpose (`context.excluded`, set in Brease's Pages list: those addresses answer "not found").
 - Everything that read a fixed locale (`getPage(…, { locale: 'hu' })`, `getNavigation`, `site.seo.hu`) takes it from the route instead.
 - Links inside content are already locale URLs. Build other internal links with `localeHref(settings, slug, locale)`.
 - Text written into components (button labels, captions) stays as it is; moving it into Brease content is a separate change.

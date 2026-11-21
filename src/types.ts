@@ -94,6 +94,8 @@ export type Page<T = Record<string, unknown>> = {
   seo: PageSeo
   resolvedSeo: ResolvedSeo
   alternates: Record<string, string>
+  // Languages the page is left out of on purpose: it has no version there, and a locale switcher leaves them out.
+  excludedLocales?: string[]
 }
 
 // The extra fields are absent from servers before they existed.

@@ -288,6 +288,14 @@ describe('locale context', () => {
     })
   })
 
+  it('passes on the locales the page is left out of', async () => {
+    const page = { alternates: { hu: 'https://example.com/allasok' }, excludedLocales: ['en'] }
+    const home = { alternates: { hu: 'https://example.com/', en: 'https://example.com/en' } }
+    const { fetch } = mockFetch([json(site), json(page), json(home)])
+    const context = await createBrease({ token: 't', fetch }).localeContext(['allasok'])
+    expect(context?.excluded).toEqual(['en'])
+  })
+
   it('treats a locale without content like no locale', async () => {
     const { fetch } = mockFetch([json(site), json({}, 404), json({}, 404)])
     expect(await createBrease({ token: 't', fetch }).localeContext(['en'])).toBeNull()
