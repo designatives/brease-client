@@ -73,6 +73,8 @@ export type Site = {
   seo: Record<string, SiteSeo>
   // The GA4 tag to render with ga4Tag(); absent from servers before it existed.
   analytics?: { ga4: string } | null
+  // Search engine verification tags, also in every page's resolvedSeo.verification (rendered by the head helpers).
+  verification?: { google: string } | null
   // The site's public address (its primary domain, e.g. "https://www.example.com"), the one canonical URLs
   // use; null before a domain is set. Use it for sitemaps and metadataBase.
   url?: string | null
