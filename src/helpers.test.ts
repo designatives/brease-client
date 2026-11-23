@@ -111,6 +111,19 @@ describe('revalidateHandler', () => {
   })
 })
 
+describe('search engine verification', () => {
+  const verified: ResolvedSeo = { ...seo, verification: { google: 'abc_DEF-123' } }
+  it("renders Google's verification meta tag in the head and in Next metadata", () => {
+    expect(headTags(verified)).toContain('<meta name="google-site-verification" content="abc_DEF-123">')
+    expect(breaseHead(verified)).toContain('google-site-verification')
+    expect(toMetadata(verified).verification).toEqual({ google: 'abc_DEF-123' })
+  })
+  it('leaves it out when Brease sent none', () => {
+    expect(headTags(seo)).not.toContain('google-site-verification')
+    expect(toMetadata(seo)).not.toHaveProperty('verification')
+  })
+})
+
 describe('head tags', () => {
   it('escapes attributes and JSON-LD', () => {
     const html = headTags(seo, { xDefault: 'https://example.com/rolunk' })

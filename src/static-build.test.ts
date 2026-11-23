@@ -153,6 +153,14 @@ describe('renderTemplate', () => {
     )
   })
 
+  it('puts the verification tag into <!-- brease:head -->', () => {
+    const base = CONTENT.en?.about as Page
+    const html = renderTemplate('<head><!-- brease:head --></head>', {
+      page: { ...base, resolvedSeo: { ...base.resolvedSeo, verification: { google: 'tok1' } } }
+    })
+    expect(html).toContain('<meta name="google-site-verification" content="tok1">')
+  })
+
   it('keeps the template where a field has no value, and escapes plain text', () => {
     const html = renderTemplate('<h1 data-brease="missing">Kept</h1><p data-brease="t">x</p>', {
       page: { ...(CONTENT.en?.about as Page), content: { t: 'a < b & c' } }

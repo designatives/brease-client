@@ -60,6 +60,8 @@ export type ResolvedSeo = {
   customHead?: string
   customCode?: string
   favicon?: string
+  // Site-ownership tags Brease adds for a search engine, e.g. Google Search Console's meta-tag verification.
+  verification?: { google?: string }
 }
 
 export type Site = {

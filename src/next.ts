@@ -25,6 +25,7 @@ export type BreaseMetadata = {
     images?: string[]
   }
   icons?: { icon: string }
+  verification?: { google: string }
   other?: Record<string, string>
 }
 
@@ -56,7 +57,8 @@ export function toMetadata(seo: ResolvedSeo, opts: { xDefault?: string } = {}): 
       description: seo.twitter.description,
       images: seo.twitter.image ? [seo.twitter.image] : undefined
     }),
-    icons: seo.favicon ? { icon: seo.favicon } : undefined
+    icons: seo.favicon ? { icon: seo.favicon } : undefined,
+    verification: seo.verification?.google ? { google: seo.verification.google } : undefined
   })
 }
 

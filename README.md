@@ -167,6 +167,12 @@ try {
 } catch {}
 ```
 
+### Search Console verification
+
+When Brease can't add a DNS record for the site's domain, it verifies the site in Google Search Console with a
+meta tag: `page.resolvedSeo.verification.google`. `toMetadata`, `headTags`, `breaseHead` and `<!-- brease:head -->`
+render it as `<meta name="google-site-verification" content="…">` on their own (0.14.0 and newer); nothing to add.
+
 ### Structured data (JSON-LD)
 
 Structured data is content: the page's own entries (its SEO in Brease) and the site's (site SEO) come together in

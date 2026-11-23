@@ -19,6 +19,7 @@ export function headTagList(seo: ResolvedSeo, opts: HeadOptions = {}): HeadTag[]
     if (value) tags.push({ tag: 'meta', attrs: { [key]: name, content: value } })
   }
   meta('name', 'description', seo.description)
+  meta('name', 'google-site-verification', seo.verification?.google)
   if (seo.canonical) tags.push({ tag: 'link', attrs: { rel: 'canonical', href: seo.canonical } })
   meta(
     'name',
