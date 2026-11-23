@@ -414,6 +414,23 @@ package.json      "build": "brease-client build", "dev": "brease-client serve"
 - Text: the element's text becomes the field (rich text keeps its HTML; mark it `data-brease-html`). Images: on `<img>` the `src`, `alt`, `width` and `height`; on other elements the background image. Links: on `<a>` the `href`, and the label where the link has no child elements.
 - Lists and menus: the child marked `data-brease-item` repeats per item; its markers are written for the first item (`rooms.0.name`) and renumbered for the rest. In a menu (`nav:<key>`), the item's `<a>` gets the menu item's address and label (or the elements marked `data-brease-label` get the label).
 - `_global:<path>` reads the site-wide page; the output carries that page's id, as the editor expects.
+- Current page: in a menu, the item linking to the page being rendered gets `aria-current="page"` on its `<a>`.
+  Put `data-brease-current-class="active"` on the menu element to also add that class to the item, so the site's
+  existing "active" CSS keeps working.
+- Language switcher: mark the list `data-brease="locales"`. Its `data-brease-item` repeats once per language that
+  has content (see `localeLinks`): the `<a>` gets the same page in that language (or that language's home page),
+  `hreflang`, `lang` and the language's own name (`Deutsch`, `Magyar`), unless elements marked `data-brease-label`
+  take the name. The current language is marked like the current menu item, and `data-brease-current-class` works
+  the same way. Languages a page is left out of are skipped. No JavaScript is needed.
+
+  ```html
+  <ul class="lang" data-brease="locales" data-brease-current-class="is-active">
+    <li data-brease-item><a href="/">EN</a></li>
+  </ul>
+  ```
+
+  To show a short code (`EN`, `DE`) instead of the name, put the code in the template by hand per language, or use
+  `data-brease-label` on an element styled with `text-transform: uppercase` and keep the name.
 - New content goes live when Brease rebuilds the site after a publish.
 
 `renderTemplate(html, { page, global, navigations })` (root export) does the filling, for other build setups.

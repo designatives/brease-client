@@ -1,4 +1,5 @@
 import { headTags } from './html'
+import type { LocaleLink } from './locales'
 import type { Navigation, NavigationItem, Page } from './types'
 
 // A static site's own HTML, filled from Brease: the same data-brease markers the editor reads say where each
@@ -12,16 +13,21 @@ import type { Navigation, NavigationItem, Page } from './types'
 // - A list field: the element's first child marked data-brease-item is repeated for each item, its markers
 //   written for the first item (`rooms.0.name`) and renumbered for the others.
 // - data-brease="nav:main": the data-brease-item child is repeated per menu item; its <a> gets the item's url
-//   and label (or the elements marked data-brease-label get the label).
+//   and label (or the elements marked data-brease-label get the label). The item linking to the page being
+//   rendered gets aria-current="page", plus the class named in data-brease-current-class on the list, if any.
+// - data-brease="locales": a language switcher; the data-brease-item child is repeated per locale (see
+//   localeLinks), its <a> gets the address, hreflang and the language's own name, the current one is marked
+//   like the current menu item.
 // - "_global:footer.copyright": a field of the site-wide page; written out with that page's id, as the editor
 //   expects.
 // - <!-- brease:head --> becomes the page's SEO tags; <html lang> becomes the page's locale.
 // A field with no value leaves the template's own markup in place.
 
 export type TemplateData = {
-  page: Pick<Page, 'pageId' | 'locale' | 'content' | 'resolvedSeo'>
+  page: Pick<Page, 'pageId' | 'locale' | 'content' | 'resolvedSeo'> & Partial<Pick<Page, 'url'>>
   global?: Pick<Page, 'pageId' | 'content'> | null
   navigations?: Record<string, Navigation | null>
+  locales?: LocaleLink[]
 }
 
 type Attr = { name: string; value: string | null }
@@ -199,8 +205,23 @@ function itemTemplate(el: Element) {
   return template ?? null
 }
 
-function renderNavItem(template: Element, item: NavigationItem) {
-  const copy = clone(template)
+const pathOnly = (url: string) => {
+  try {
+    return new URL(url, 'http://localhost').pathname.replace(/(.)\/+$/, '$1')
+  } catch {
+    return url
+  }
+}
+
+function markCurrent(item: Element, link: Element | undefined, currentClass: string | undefined) {
+  if (link) setAttr(link, 'aria-current', 'page')
+  if (currentClass) {
+    const classes = (attr(item, 'class')?.value ?? '').split(/\s+/).filter(Boolean)
+    if (!classes.includes(currentClass)) setAttr(item, 'class', [...classes, currentClass].join(' '))
+  }
+}
+
+function linkParts(copy: Element) {
   const labels: Element[] = []
   const links: Element[] = []
   const walk = (el: Element) => {
@@ -209,19 +230,45 @@ function renderNavItem(template: Element, item: NavigationItem) {
     for (const c of elements(el.children)) walk(c)
   }
   walk(copy)
-  const link = copy.tag === 'a' ? copy : links[0]
+  return { labels, link: copy.tag === 'a' ? copy : links[0] }
+}
+
+function renderLocaleItem(template: Element, item: LocaleLink, currentClass: string | undefined) {
+  const copy = clone(template)
+  const { labels, link } = linkParts(copy)
+  if (link) {
+    setAttr(link, 'href', item.href)
+    setAttr(link, 'hreflang', item.locale)
+    setAttr(link, 'lang', item.locale)
+    if (!labels.length && !elements(link.children).length) setText(link, item.label, false)
+  }
+  for (const label of labels) setText(label, item.label, false)
+  if (item.current) markCurrent(copy, link, currentClass)
+  return copy
+}
+
+function renderNavItem(
+  template: Element,
+  item: NavigationItem,
+  currentPath: string | null,
+  currentClass: string | undefined
+) {
+  const copy = clone(template)
+  const { labels, link } = linkParts(copy)
   if (link) {
     setAttr(link, 'href', item.url)
     if (item.target === '_blank') setAttr(link, 'target', '_blank')
     if (!labels.length && !elements(link.children).length) setText(link, item.label, false)
   }
   for (const label of labels) setText(label, item.label, false)
+  if (currentPath && item.url && pathOnly(item.url) === currentPath) markCurrent(copy, link, currentClass)
   return copy
 }
 
 export function renderTemplate(template: string, data: TemplateData): string {
   const nodes = parseHtml(template)
   const head = headTags(data.page.resolvedSeo)
+  const currentPath = data.page.url ? pathOnly(data.page.url) : null
 
   const resolve = (ref: string): { value: unknown; marker: string } => {
     const at = ref.indexOf(':')
@@ -241,11 +288,22 @@ export function renderTemplate(template: string, data: TemplateData): string {
   const fill = (el: Element) => {
     const marker = attr(el, 'data-brease')
     const ref = marker?.value
+    const currentClass = attr(el, 'data-brease-current-class')?.value ?? undefined
+    if (marker && ref === 'locales') {
+      const template = itemTemplate(el)
+      if (data.locales && template) {
+        const rendered = data.locales.map((item) => renderLocaleItem(template, item, currentClass))
+        el.children = el.children.flatMap((c) =>
+          c === template ? rendered : c.kind === 'el' && attr(c, 'data-brease-item') ? [] : [c]
+        )
+      }
+      return
+    }
     if (marker && ref?.startsWith('nav:')) {
       const items = data.navigations?.[ref.slice(4)]?.items
       const template = itemTemplate(el)
       if (items && template) {
-        const rendered = items.map((item) => renderNavItem(template, item))
+        const rendered = items.map((item) => renderNavItem(template, item, currentPath, currentClass))
         el.children = el.children.flatMap((c) =>
           c === template ? rendered : c.kind === 'el' && attr(c, 'data-brease-item') ? [] : [c]
         )

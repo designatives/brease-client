@@ -12,6 +12,7 @@ import {
 import { createServer } from 'node:http'
 import { dirname, extname, join, relative } from 'node:path'
 import type { Brease } from './index'
+import { localeLinks } from './locales'
 import { matchRedirect } from './redirects'
 import { renderTemplate } from './template'
 import type { Navigation, Page, Redirect } from './types'
@@ -179,19 +180,25 @@ async function renderPage(brease: Brease, root: string, slug: string, locale: st
   })
   if (!file) throw new Error(`No template for "${slug || 'home'}": add ${TEMPLATES_DIR}/page.html`)
   const template = readFileSync(file, 'utf8')
-  const [global, navigations] = await Promise.all([
+  const [global, navigations, locales] = await Promise.all([
     template.includes('_global:') ? brease.getPage('_global', { locale }).catch(() => null) : null,
     Promise.all(
       navigationKeys(template).map(async (key) => [
         key,
         await brease.getNavigation(key, { locale }).catch(() => null)
       ])
-    )
+    ),
+    template.includes('data-brease="locales"')
+      ? brease
+          .localeContext(new URL(page.url, 'http://localhost').pathname.split('/').filter(Boolean))
+          .then((context) => (context ? localeLinks(context) : undefined))
+      : undefined
   ])
   return renderTemplate(template, {
     page,
     global,
-    navigations: Object.fromEntries(navigations) as Record<string, Navigation | null>
+    navigations: Object.fromEntries(navigations) as Record<string, Navigation | null>,
+    locales
   })
 }
 

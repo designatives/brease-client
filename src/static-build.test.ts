@@ -128,6 +128,31 @@ describe('renderTemplate', () => {
     expect(html).toContain('class="logo"')
   })
 
+  it('fills a language switcher and marks the current menu item and language', () => {
+    const html = renderTemplate(
+      '<ul data-brease="nav:main" data-brease-current-class="active"><li data-brease-item><a href="#">x</a></li></ul>' +
+        '<ul data-brease="locales" data-brease-current-class="on"><li data-brease-item><a href="#">x</a></li></ul>',
+      {
+        page: { ...(CONTENT.en?.about as Page), url: 'https://site.test/about/' },
+        navigations: { main: NAV.en as Navigation },
+        locales: [
+          { locale: 'en', label: 'English', href: '/about', current: true },
+          { locale: 'de', label: 'Deutsch', href: '/de/ueber-uns', current: false }
+        ]
+      }
+    )
+    expect(html).toContain('<li data-brease-item><a href="/">Home</a></li>')
+    expect(html).toContain(
+      '<li data-brease-item class="active"><a href="/about" aria-current="page">About</a></li>'
+    )
+    expect(html).toContain(
+      '<li data-brease-item class="on"><a href="/about" hreflang="en" lang="en" aria-current="page">English</a></li>'
+    )
+    expect(html).toContain(
+      '<li data-brease-item><a href="/de/ueber-uns" hreflang="de" lang="de">Deutsch</a></li>'
+    )
+  })
+
   it('keeps the template where a field has no value, and escapes plain text', () => {
     const html = renderTemplate('<h1 data-brease="missing">Kept</h1><p data-brease="t">x</p>', {
       page: { ...(CONTENT.en?.about as Page), content: { t: 'a < b & c' } }
