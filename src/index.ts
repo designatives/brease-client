@@ -95,6 +95,15 @@ function hostGit(): { commit?: string; branch?: string } {
   return {}
 }
 
+// Cache-Control for a page rendered on request. The host's CDN keeps it a minute and refreshes it in the
+// background; while the site's server or Brease fails it keeps serving the last good copy for a day. Browsers
+// always ask again. The editor's preview and Brease draft branches are never cached. Vercel honours it;
+// a Cloudflare Worker's own responses don't go through Cloudflare's cache.
+export function pageCacheControl(): string {
+  if (env('BREASE_PREVIEW') || hostGit().branch?.startsWith(DRAFT_BRANCH_PREFIX)) return 'no-store'
+  return 'public, max-age=0, s-maxage=60, stale-while-revalidate=300, stale-if-error=86400'
+}
+
 // Bumped by clearBreaseCache: every client then re-reads its site and redirects on next use.
 let cacheGeneration = 0
 

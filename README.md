@@ -96,11 +96,12 @@ async function load(params: Props['params']) {
 }
 
 export async function generateStaticParams() {
-  // The build goes on without pre-rendered pages if the content API has a hiccup; pages then render on first request.
+  // If Brease can't be reached the build fails, so the host keeps serving the current deployment instead of one
+  // without pages. Only the editor's preview (BREASE_PREVIEW) builds on without them.
   try {
     return (await brease.routes()).map((r) => ({ slug: r.path })) // published pages, without site-wide "_" pages
   } catch (err) {
-    console.warn(`Brease pages unavailable at build time: ${(err as Error).message}`)
+    if (!process.env.BREASE_PREVIEW) throw err
     return []
   }
 }
@@ -452,7 +453,7 @@ every locale, `matchRedirect()` for redirects on servers that answer each reques
 
 - **SvelteKit**: a rest route `src/routes/[...path]/+page.server.ts` whose `load` calls `brease.route(params.path)` and
   `getPage`, returns `headTags(page.resolvedSeo)` for `<svelte:head>`, and redirects with `matchRedirect`. With
-  `adapter-static`, export `entries` from `brease.routes()` so every page prerenders.
+  `adapter-static`, export `entries` from `brease.routes()` so every page prerenders (without catching its errors).
 - **Nuxt 3**: a server route (`server/api/brease/page.get.ts`) reads the page in Nitro, `pages/[...slug].vue` loads it
   with `useFetch`, and a server middleware applies `matchRedirect` with `sendRedirect`.
 - **React Router v7 / Remix**: the splat route `app/routes/$.tsx` reads the page in its `loader` (a `.server.ts`
@@ -473,6 +474,24 @@ every locale, `matchRedirect()` for redirects on servers that answer each reques
 - **Sites not built with JavaScript (Hugo, Jekyll, Hexo, PHP, other server templates)**: they become static sites
   built from Brease. Their rendered HTML becomes the templates (see Static HTML sites), `brease-client build`
   replaces the old generator's build, and the content moves from Markdown and data files into Brease.
+
+### When Brease can't be reached
+
+Built pages don't need Brease: a static or pre-rendered site keeps working, and a build that can't read Brease
+should fail (don't catch errors from `routes()`), so the host keeps the deployment it has. Pages rendered on each
+request do need it; send `pageCacheControl()` as their `Cache-Control` header and the host's CDN keeps serving the
+last good copy for a day while Brease or the server fails (`stale-if-error`), refreshing it every minute otherwise.
+It returns `no-store` in the editor's preview and on Brease draft branches. Vercel honours it; on Cloudflare a
+Worker's own responses aren't cached by Cloudflare's CDN.
+
+```ts
+import { pageCacheControl } from 'brease-client'
+
+// SvelteKit load:      setHeaders({ 'cache-control': pageCacheControl() })
+// Astro (server):      Astro.response.headers.set('Cache-Control', pageCacheControl())
+// React Router/Remix:  export const headers = () => ({ 'Cache-Control': pageCacheControl() })
+// Express:             res.set('Cache-Control', pageCacheControl())
+```
 
 ## Editor markers
 

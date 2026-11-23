@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { BreaseError, clearBreaseCache, createBrease } from './index'
+import { BreaseError, clearBreaseCache, createBrease, pageCacheControl } from './index'
 import type { PageRef, Site } from './types'
 
 type Call = { url: string; headers: Record<string, string> }
@@ -316,5 +316,25 @@ describe('sitemap', () => {
       { url: 'https://example.com/', alternates },
       { url: 'https://example.com/en', alternates }
     ])
+  })
+})
+
+describe('pageCacheControl', () => {
+  it('lets the CDN serve a stale copy while the site or Brease fails', () => {
+    vi.stubEnv('BREASE_PREVIEW', '')
+    vi.stubEnv('VERCEL_GIT_COMMIT_SHA', 'abc')
+    vi.stubEnv('VERCEL_GIT_COMMIT_REF', 'main')
+    expect(pageCacheControl()).toBe(
+      'public, max-age=0, s-maxage=60, stale-while-revalidate=300, stale-if-error=86400'
+    )
+  })
+
+  it('never caches the editor preview or a draft branch', () => {
+    vi.stubEnv('BREASE_PREVIEW', '1')
+    expect(pageCacheControl()).toBe('no-store')
+    vi.stubEnv('BREASE_PREVIEW', '')
+    vi.stubEnv('VERCEL_GIT_COMMIT_SHA', 'abc')
+    vi.stubEnv('VERCEL_GIT_COMMIT_REF', 'brease/draft/drf_1')
+    expect(pageCacheControl()).toBe('no-store')
   })
 })
