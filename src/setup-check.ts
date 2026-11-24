@@ -3,8 +3,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, posix, relative } from 'node:path'
 
 // `brease-client check`, beyond sections: what Brease's setup (Final checks) looks at in a repository, checked
-// locally. Problems block Final checks; notes don't.
-export type SetupReport = { problems: string[]; notes: string[] }
+// locally. Problems block Final checks; warnings and notes don't.
+export type SetupReport = { problems: string[]; warnings: string[]; notes: string[] }
 
 const SKIP = new Set([
   'node_modules',
@@ -48,6 +48,52 @@ function fileRefs(value: unknown, out: string[]) {
 
 const LOCALE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/
 
+// Images given as plain paths instead of $file: Brease's import finds them the same way (a small copy of its rules:
+// image objects with url/src, image-named fields, SEO images), looking in public/, static/, the root, src/assets/,
+// assets/ and the seed folder.
+const IMAGE_EXT = /\.(avif|gif|ico|jpe?g|png|svg|webp)$/i
+const IMAGE_KEY =
+  /(image|img|photo|picture|logo|icon|background|cover|thumbnail|thumb|avatar|poster|banner|favicon)$/i
+
+function imagePath(raw: string): string | null {
+  const text = raw.trim()
+  if (!text || /^(https?:|data:|blob:|mailto:|tel:|#|javascript:)/i.test(text) || text.startsWith('//'))
+    return null
+  if (/\s/.test(text)) return null
+  let path = text.split(/[?#]/)[0] as string
+  try {
+    path = decodeURI(path)
+  } catch {}
+  path = path.replace(/^\.\//, '')
+  return path && !path.includes('..') && IMAGE_EXT.test(path) ? path : null
+}
+
+function plainImages(value: unknown, key: string, out: string[]) {
+  if (Array.isArray(value)) for (const v of value) plainImages(v, key, out)
+  else if (value && typeof value === 'object') {
+    const o = value as Record<string, unknown>
+    if (typeof o.$file === 'string') return
+    const raw = typeof o.url === 'string' ? o.url : typeof o.src === 'string' ? o.src : null
+    if (raw !== null && !('href' in o) && !('label' in o) && !o.assetId) {
+      const path = imagePath(raw)
+      if (path) out.push(path)
+      return
+    }
+    for (const [k, v] of Object.entries(o)) plainImages(v, k, out)
+  } else if (typeof value === 'string' && IMAGE_KEY.test(key)) {
+    const path = imagePath(value)
+    if (path) out.push(path)
+  }
+}
+
+function imageFound(root: string, seedDir: string, path: string) {
+  const p = path.replace(/^\/+/, '')
+  const list = path.startsWith('/')
+    ? ['public', 'static', '', 'src/assets', 'assets', seedDir]
+    : [seedDir, '', 'public', 'static', 'src/assets', 'src', 'assets']
+  return list.some((dir) => existsSync(join(root, dir, p)))
+}
+
 function checkSeed(root: string, dir: string, report: SetupReport) {
   const name = relative(root, dir)
   if (!existsSync(join(dir, 'manifest.json'))) report.problems.push(`${name}/manifest.json is missing`)
@@ -57,6 +103,7 @@ function checkSeed(root: string, dir: string, report: SetupReport) {
     return
   }
   const refs: string[] = []
+  const plain: string[] = []
   const locales = new Set<string>()
   let pages = 0
   for (const pageId of readdirSync(pagesDir)) {
@@ -83,6 +130,7 @@ function checkSeed(root: string, dir: string, report: SetupReport) {
       if (typeof page?.slug !== 'string')
         report.problems.push(`${name}/pages/${pageId}/${file} has no "slug"`)
       fileRefs(page, refs)
+      plainImages(page, '', plain)
     }
   }
   for (const extra of ['site.json', 'redirects.json']) {
@@ -90,7 +138,10 @@ function checkSeed(root: string, dir: string, report: SetupReport) {
     if (!existsSync(path)) continue
     const parsed = json(path)
     if (parsed.error) report.problems.push(`${name}/${extra} isn't valid JSON: ${parsed.error}`)
-    else fileRefs(parsed.value, refs)
+    else {
+      fileRefs(parsed.value, refs)
+      if (extra === 'site.json') plainImages(parsed.value, '', plain)
+    }
   }
   const navDir = join(dir, 'navigations')
   if (existsSync(navDir))
@@ -105,13 +156,17 @@ function checkSeed(root: string, dir: string, report: SetupReport) {
     report.problems.push(
       `An image or file in the seed points at ${ref}, which isn't in the site (paths start at the site's root)`
     )
+  for (const path of [...new Set(plain)].filter((p) => !imageFound(root, name, p)))
+    report.warnings.push(
+      `The seed names the image ${path}, which isn't in public/, static/, the site's root, src/assets/, assets/ or ${name}/: Brease will skip it (use { "$file": "<path from the site's root>" })`
+    )
   report.notes.push(
     `Content: ${pages} page(s) in ${[...locales].sort().join(', ') || 'no language'}, ${new Set(refs).size} file(s)`
   )
 }
 
 export function setupCheck(root: string): SetupReport {
-  const report: SetupReport = { problems: [], notes: [] }
+  const report: SetupReport = { problems: [], warnings: [], notes: [] }
   const pkgPath = join(root, 'package.json')
   if (!existsSync(pkgPath))
     report.problems.push('No package.json here: run the check in the site’s root folder')

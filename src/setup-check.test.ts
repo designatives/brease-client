@@ -66,4 +66,27 @@ describe('setupCheck', () => {
     const bad = setupCheck(site({ ...READY, '.env': `BREASE_TOKEN=${token}` }))
     expect(bad.problems.join('\n')).toMatch(/\.env contains a Brease token/)
   })
+
+  it('warns, without failing, about plain image paths Brease will not find', () => {
+    const report = setupCheck(
+      site({
+        ...READY,
+        'public/img/ok.jpg': 'x',
+        'brease-seed/pages/pg_home/en.json': JSON.stringify({
+          slug: '',
+          seo: { openGraph: { image: '/img/og-missing.png' } },
+          content: {
+            hero: { url: '/img/ok.jpg', alt: 'Found in public/' },
+            cover: 'img/gone.webp',
+            link: { label: 'Not an image', href: '/a.png' },
+            remote: { url: 'https://example.com/x.jpg' }
+          }
+        })
+      })
+    )
+    expect(report.problems).toEqual([])
+    expect(report.warnings).toHaveLength(2)
+    expect(report.warnings.join('\n')).toMatch(/og-missing.png/)
+    expect(report.warnings.join('\n')).toMatch(/img\/gone.webp/)
+  })
 })

@@ -28,7 +28,7 @@ For an existing Next.js site (other frameworks follow the same steps; see [Astro
 8. Add a `BREASE.md` that tells Brease's AI how the site is built. Brease counts a site as integrated only when the repo has both `brease-client` and `BREASE.md`.
 9. Optional: [sections](#sections) and `content.schema.json`. Then run `npx brease-client check`.
 
-`npx brease-client check` checks what Brease's setup looks at: `brease-client` in `package.json`, `BREASE.md`, the content in `brease-seed/` (valid JSON, language codes, every `$file` pointing at a file in the site), `data-brease` markers, no `BREASE_TOKEN` committed outside `.env*.local`, and the [sections](#sections) setup. It prints `Ready for Brease.` or one `problem:` line per thing to fix.
+`npx brease-client check` checks what Brease's setup looks at: `brease-client` in `package.json`, `BREASE.md`, the content in `brease-seed/` (valid JSON, language codes, every `$file` pointing at a file in the site, and a warning for plain image paths Brease's import won't find), `data-brease` markers, no `BREASE_TOKEN` committed outside `.env*.local`, and the [sections](#sections) setup. It prints `Ready for Brease.` or one `problem:` line per thing to fix.
 
 Let an AI agent do these steps: `npx brease-client skill` installs the **breasify** skill into `.claude/skills/breasify` (Claude Code; `--dir` for another folder), then ask the agent to "breasify this site". The skill is also a download on the docs site.
 

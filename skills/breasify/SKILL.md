@@ -106,7 +106,9 @@ npx brease-client check
 ```
 
 and the site's own checks (typecheck, lint). It prints `Ready for Brease.` when everything it can check locally is
-in place; fix every `problem:` line before reporting.
+in place; fix every `problem:` line before reporting. A `warning:` about an image means a plain image path in the
+seed that Brease won't find (it looks in `public/`, `static/`, the site's root, `src/assets/`, `assets/` and
+`brease-seed/`): point it at the real file, best as `{ "$file": "<path from the site's root>" }`.
 
 Builds read content from Brease, so before the site is connected (no `BREASE_TOKEN`) a full build can't run:
 - Next.js: `BREASE_PREVIEW=1` + the build command checks that the code compiles without content.

@@ -66,9 +66,14 @@ function check() {
     warnings = checkSections(files, content ? pagesIn(content) : {})
   }
   for (const n of report.notes) console.log(`note: ${n}`)
-  for (const w of warnings) console.log(`warning: ${w}`)
+  for (const w of [...report.warnings, ...warnings]) console.log(`warning: ${w}`)
   for (const p of report.problems) console.log(`problem: ${p}`)
-  if (!report.problems.length && !warnings.length) console.log('Ready for Brease.')
+  if (!report.problems.length && !warnings.length)
+    console.log(
+      report.warnings.length
+        ? `Ready for Brease, with ${report.warnings.length} image warning(s): those images won't be imported.`
+        : 'Ready for Brease.'
+    )
   else
     console.log(
       [
