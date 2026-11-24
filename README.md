@@ -509,7 +509,7 @@ should fail (don't catch errors from `routes()`), so the host keeps the deployme
 request do need it; send `pageCacheControl()` as their `Cache-Control` header and the host's CDN keeps serving the
 last good copy for a day while Brease or the server fails (`stale-if-error`), refreshing it every minute otherwise.
 It returns `no-store` in the editor's preview and on Brease draft branches. Vercel honours it; on Cloudflare a
-Worker's own responses aren't cached by Cloudflare's CDN.
+Worker's own responses aren't cached by Cloudflare's CDN, so use `withLastGood()` there (below).
 
 ```ts
 import { pageCacheControl } from 'brease-client'
@@ -519,6 +519,27 @@ import { pageCacheControl } from 'brease-client'
 // React Router/Remix:  export const headers = () => ({ 'Cache-Control': pageCacheControl() })
 // Express:             res.set('Cache-Control', pageCacheControl())
 ```
+
+On Cloudflare Workers, wrap the Worker's `fetch` in `withLastGood()`: it keeps the last good HTML of every page in
+the Worker's cache (`caches.default`) and answers from it, for up to a day, when a render fails because Brease
+can't be reached (a network error, a timeout or a 5xx from Brease, or a 5xx from the render). Served copies carry
+an `x-brease-stale` header. Only `GET` requests and `200` HTML responses are kept; responses that set cookies or
+are marked `private`/`no-store`, and visitors with a session cookie or an `Authorization` header, are never
+cached or served from the copy. The editor's preview and Brease draft branches skip it. Tracking parameters
+(`utm_*`, `gclid`, `fbclid`, …) don't split the cache.
+
+```ts
+import { withLastGood } from 'brease-client'
+import handler from './dist/_worker.js/index.js' // the framework's own Worker entry
+
+export default {
+  fetch: (request, env, ctx) =>
+    withLastGood(request, () => handler.fetch(request, env, ctx), { waitUntil: (p) => ctx.waitUntil(p) })
+}
+```
+
+Options: `maxAgeSeconds` (default one day), `cache` (another `Cache`), `onServerError: false` to serve the copy
+only for errors thrown from Brease, and `preview` to override the preview rule.
 
 ## Editor markers
 

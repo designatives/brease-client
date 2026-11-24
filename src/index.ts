@@ -1,11 +1,13 @@
 import { env } from './env'
 import { BreaseError } from './errors'
+import { type LastGoodOptions, withLastGood as lastGood } from './last-good'
 import type { Navigation, Page, PageRef, Redirect, Release, Site, SitemapEntry, UrlSettings } from './types'
 import { resolvePath } from './urls'
 
 export { type Ga4Tag, ga4Html, ga4Tag, grantAnalytics } from './analytics'
 export { type CustomTag, customTags } from './custom-code'
 export { BreaseError } from './errors'
+export { isBreaseOutage, type LastGoodOptions, lastGoodKey } from './last-good'
 export { type LocaleLink, localeHref, localeLinks, nativeName } from './locales'
 export { fieldPath, navPath } from './markers'
 export { matchRedirect } from './redirects'
@@ -102,6 +104,18 @@ function hostGit(): { commit?: string; branch?: string } {
 export function pageCacheControl(): string {
   if (env('BREASE_PREVIEW') || hostGit().branch?.startsWith(DRAFT_BRANCH_PREFIX)) return 'no-store'
   return 'public, max-age=0, s-maxage=60, stale-while-revalidate=300, stale-if-error=86400'
+}
+
+/**
+ * For sites rendered on request in a Cloudflare Worker: keeps the last good HTML of every page in the Cache
+ * API and serves it (for up to a day) when a render fails because Brease can't be reached. See last-good.ts.
+ */
+export function withLastGood(
+  request: Request,
+  render: () => Promise<Response>,
+  opts: LastGoodOptions = {}
+): Promise<Response> {
+  return lastGood(request, render, { ...opts, previewDefault: pageCacheControl() === 'no-store' })
 }
 
 // Bumped by clearBreaseCache: every client then re-reads its site and redirects on next use.
