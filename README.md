@@ -541,6 +541,20 @@ export default {
 Options: `maxAgeSeconds` (default one day), `cache` (another `Cache`), `onServerError: false` to serve the copy
 only for errors thrown from Brease, and `preview` to override the preview rule.
 
+### Offline mode (content without Brease)
+
+Brease's content export ("Take your content with you" on the Billing page) puts the site's published content into
+the repository as `brease-seed/`, with its images in `brease-seed/media/`. With `BREASE_OFFLINE=1` (or
+`createBrease({ offline: true })`), the client reads that folder instead of the Brease API and answers every call
+with the same shapes, so the site keeps building and rendering without Brease and without a token.
+
+- The folder is `brease-seed` in the working directory; `BREASE_SEED_DIR` changes it.
+- Images point at `/brease-seed/media/…`. Copy the files into the folder your site serves as is:
+  `brease-client offline-media public` (Next.js, Astro, Vite) or `static` (SvelteKit). `BREASE_OFFLINE_MEDIA_URL`
+  changes the address if they're served elsewhere.
+- Links to pages, menus, redirects, page URLs in every language and the page's SEO are worked out from the files.
+  Content can't change any more: it is what was published when the export was made.
+
 ## Editor markers
 
 The Brease editor's Edit tool finds content through `data-brease` attributes:

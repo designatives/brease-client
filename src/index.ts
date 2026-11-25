@@ -1,6 +1,7 @@
 import { env } from './env'
 import { BreaseError } from './errors'
 import { type LastGoodOptions, withLastGood as lastGood } from './last-good'
+import { offlineFetch, readSeed, type Seed } from './offline'
 import type { Navigation, Page, PageRef, Redirect, Release, Site, SitemapEntry, UrlSettings } from './types'
 import { resolvePath } from './urls'
 
@@ -49,6 +50,10 @@ export type BreaseOptions = {
   retryBaseMs?: number
   // Per request; a timed-out request isn't retried. Keep it short where a visitor waits on it (a proxy).
   timeoutMs?: number
+  // Read the content from a brease-seed/ folder (Brease's content export) instead of the API, so the site runs
+  // without Brease. Also BREASE_OFFLINE=1 (folder: BREASE_SEED_DIR, default "brease-seed"; image URLs start
+  // with BREASE_OFFLINE_MEDIA_URL, default "/").
+  offline?: boolean | { dir?: string; mediaUrl?: string }
 }
 
 export interface Brease {
@@ -136,7 +141,21 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
   const retries = opts.retries ?? 2
   const baseMs = opts.retryBaseMs ?? 300
   const timeoutMs = opts.timeoutMs ?? 5_000
-  const doFetch: typeof fetch = opts.fetch ?? ((input, init) => fetch(input, init))
+  const offline =
+    opts.offline === undefined
+      ? env('BREASE_OFFLINE') === '1' || env('BREASE_OFFLINE') === 'true'
+      : !!opts.offline
+  const offlineOpts = typeof opts.offline === 'object' ? opts.offline : {}
+  let seed: Promise<Seed> | undefined
+  const doFetch: typeof fetch = offline
+    ? offlineFetch(
+        () => {
+          seed ??= readSeed(offlineOpts.dir ?? env('BREASE_SEED_DIR') ?? 'brease-seed')
+          return seed
+        },
+        offlineOpts.mediaUrl ?? env('BREASE_OFFLINE_MEDIA_URL') ?? '/'
+      )
+    : (opts.fetch ?? ((input, init) => fetch(input, init)))
   // Re-read after a minute, so a locale added in Brease is served without a restart. While Brease can't be
   // reached, the last good value is served (and kept for another minute) instead of failing every request.
   // The editor's preview (BREASE_PREVIEW=1) always reads fresh, like breaseFetch.
@@ -174,7 +193,7 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
   ): Promise<T | null>
   async function request<T>(path: string, query?: Record<string, string | undefined>): Promise<T>
   async function request<T>(path: string, query: Record<string, string | undefined> = {}, nullOn404 = false) {
-    const token = opts.token ?? env('BREASE_TOKEN')
+    const token = opts.token ?? env('BREASE_TOKEN') ?? (offline ? 'offline' : undefined)
     if (!token)
       throw new BreaseError('unauthorized', 'No Brease token: pass { token } or set BREASE_TOKEN', 401)
     const params = new URLSearchParams()

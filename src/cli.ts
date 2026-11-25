@@ -45,7 +45,9 @@ const USAGE = `Usage:
   brease-client output <dir> [--spa]   write Brease's redirects for the host next to built files in <dir>
                                        (--spa: unknown paths serve index.html, for browser-only apps)
   brease-client content <file.json> [--nav main,footer] [--watch]
-                                       the content a browser-only app imports at build time`
+                                       the content a browser-only app imports at build time
+  brease-client offline-media <dir>    copy brease-seed/media/ into <dir> (e.g. public) for offline mode
+                                       (BREASE_OFFLINE=1 reads the content from brease-seed/)`
 
 const [command, ...args] = process.argv.slice(2)
 const flag = (name: string) => {
@@ -104,8 +106,21 @@ function skill() {
   )
 }
 
+// Offline mode serves images as /brease-seed/media/…: the files go into the site's public folder.
+function offlineMedia(dir: string) {
+  const source = join(process.cwd(), flag('seed') || 'brease-seed', 'media')
+  if (!existsSync(source)) {
+    console.log('No brease-seed/media folder: nothing to copy.')
+    return
+  }
+  const target = join(process.cwd(), dir, 'brease-seed', 'media')
+  cpSync(source, target, { recursive: true })
+  console.log(`Copied the exported media to ${relative(process.cwd(), target)}.`)
+}
+
 async function main() {
   if (command === 'check') return check()
+  if (command === 'offline-media' && args[0]) return offlineMedia(args[0])
   if (command === 'skill') return skill()
   if (command === 'build') {
     const { pages, out } = await build(createBrease(), { out: flag('out') })
