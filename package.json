@@ -85,6 +85,6 @@
     "provenance": true
   },
   "bin": {
-    "brease-client": "./dist/cli.js"
+    "brease-client": "dist/cli.js"
   }
 }
