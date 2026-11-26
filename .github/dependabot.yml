@@ -1,0 +1,9 @@
+# Weekly security updates only (AUD-8): version-update PRs are off, Dependabot's security PRs still open.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    target-branch: dev
