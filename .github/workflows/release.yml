@@ -1,9 +1,13 @@
 name: Release
 
+# Runs only for production (pushes to main, pull requests into main) and, by hand, for a dev pre-release:
+# Actions › Release › Run workflow on the dev branch. Dev pushes are checked locally with scripts/check.sh.
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
   pull_request:
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -30,10 +34,10 @@ jobs:
       # NPM_TOKEN secret after the switch so only this workflow can publish.
       - run: npm install -g npm@11.6.2
       # Two channels (AD21): main publishes the stable version from package.json under `latest` when npm doesn't
-      # have it yet (bump it to release); dev publishes a pre-release x.y.z-dev.N under `dev` on every push, so
+      # have it yet (bump it to release); a manual run on dev publishes a pre-release x.y.z-dev.N under `dev`, so
       # Brease on dev can use it while production sites keep `latest`.
       - name: Publish (stable, main)
-        if: github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           version=$(node -p "require('./package.json').version")
           case "$version" in *-*) echo "::error::package.json must carry a stable version on main, not $version."; exit 1;; esac
@@ -45,7 +49,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish (pre-release, dev)
-        if: github.ref == 'refs/heads/dev'
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'
         run: |
           base=$(node -p "require('./package.json').version")
           version="$base-dev.${{ github.run_number }}"
