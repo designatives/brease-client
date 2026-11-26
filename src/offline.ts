@@ -86,8 +86,32 @@ function pathOf(seed: Seed, pageId: string, locale: string) {
   return entry ? buildPath(seed.settings, entry.slug, locale) : null
 }
 
+const PAGE_ANCHOR = /<a\b[^>]*\bdata-brease-page="([^"]+)"[^>]*>/g
+const FILE_REF = /brease-file:([^\s"'<>()]+)/g
+
+// Rich text: exported media (brease-file:<path>) → a URL of the file, and page links (data-brease-page) → the
+// page's URL in this locale, as the delivery API sets them.
+function resolveText(seed: Seed, text: string, locale: string, mediaUrl: string) {
+  let out = text.includes('brease-file:')
+    ? text.replace(
+        FILE_REF,
+        (_m, path: string) => `${mediaUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`
+      )
+    : text
+  if (out.includes('data-brease-page'))
+    out = out.replace(PAGE_ANCHOR, (tag, pageId: string) => {
+      const href = pathOf(seed, pageId, locale)
+      if (!href) return tag
+      return /\shref="[^"]*"/.test(tag)
+        ? tag.replace(/\shref="[^"]*"/, ` href="${href}"`)
+        : tag.replace(/^<a\b/, `<a href="${href}"`)
+    })
+  return out
+}
+
 // $file → a URL, and page links ({ pageId, href }) → the page's URL in this locale, like the delivery API.
 function resolveContent(seed: Seed, value: unknown, locale: string, mediaUrl: string): unknown {
+  if (typeof value === 'string') return resolveText(seed, value, locale, mediaUrl)
   if (Array.isArray(value)) return value.map((v) => resolveContent(seed, v, locale, mediaUrl))
   if (!value || typeof value !== 'object') return value
   const obj = value as Record<string, unknown>
