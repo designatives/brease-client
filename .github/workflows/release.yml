@@ -25,6 +25,10 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      # Trusted publishing (AUD-16): npm exchanges the job's OIDC token for a one-off publish token once the package
+      # names this workflow as its trusted publisher on npmjs.com; until then NPM_TOKEN is used. Remove the
+      # NPM_TOKEN secret after the switch so only this workflow can publish.
+      - run: npm install -g npm@11.6.2
       # Two channels (AD21): main publishes the stable version from package.json under `latest` when npm doesn't
       # have it yet (bump it to release); dev publishes a pre-release x.y.z-dev.N under `dev` on every push, so
       # Brease on dev can use it while production sites keep `latest`.
@@ -36,7 +40,7 @@ jobs:
           if npm view "brease-client@$version" version >/dev/null 2>&1; then
             echo "brease-client@$version is already published"
           else
-            pnpm publish --no-git-checks --tag latest
+            npm publish --tag latest
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -46,7 +50,7 @@ jobs:
           base=$(node -p "require('./package.json').version")
           version="$base-dev.${{ github.run_number }}"
           npm version "$version" --no-git-tag-version --allow-same-version >/dev/null
-          pnpm publish --no-git-checks --tag dev
+          npm publish --tag dev
           echo "::notice::Published brease-client@$version under the dev tag."
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
