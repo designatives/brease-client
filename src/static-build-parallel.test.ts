@@ -2,8 +2,9 @@ import { cpSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import type { Brease } from './index'
 import { build } from './static-build'
-import type { Brease, Navigation, Page } from './types'
+import type { Navigation, Page } from './types'
 
 const STARTER = join(__dirname, '..', 'fixtures', 'static-starter')
 
