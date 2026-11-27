@@ -222,24 +222,65 @@ function copyAssets(root: string, out: string) {
   walk('')
 }
 
+// A static build reads one snapshot of the content, so repeated reads (navigations, _global, the home page
+// for locale links) are fetched once per build.
+function memoized(brease: Brease): Brease {
+  const pages = new Map<string, ReturnType<Brease['getPage']>>()
+  const navs = new Map<string, ReturnType<Brease['getNavigation']>>()
+  return {
+    ...brease,
+    getPage(slug, o) {
+      const key = `${o.locale}\n${slug}`
+      let hit = pages.get(key)
+      if (!hit) {
+        hit = brease.getPage(slug, o)
+        hit.catch(() => pages.delete(key))
+        pages.set(key, hit)
+      }
+      return hit as never
+    },
+    getNavigation(key, o) {
+      const k = `${o.locale}\n${key}`
+      let hit = navs.get(k)
+      if (!hit) {
+        hit = brease.getNavigation(key, o)
+        hit.catch(() => navs.delete(k))
+        navs.set(k, hit)
+      }
+      return hit
+    }
+  } as Brease
+}
+
+// Pages render this many at once (the delivery API allows 3,000 requests a minute per instance).
+const BUILD_CONCURRENCY = 6
+
 export async function build(brease: Brease, opts: { root?: string; out?: string; host?: Host } = {}) {
   const root = opts.root ?? process.cwd()
   const out = join(root, opts.out ?? 'dist')
   rmSync(out, { recursive: true, force: true })
   mkdirSync(out, { recursive: true })
   copyAssets(root, out)
-  const pages: string[] = []
-  for (const { path } of await brease.routes()) {
-    const route = await brease.route(path)
-    if (!route) continue
-    const html = await renderPage(brease, root, route.slug, route.locale)
-    if (!html) continue
-    const file = outFile(out, path)
-    mkdirSync(dirname(file), { recursive: true })
-    writeFileSync(file, html)
-    pages.push(`/${path.join('/')}`)
+  const source = memoized(brease)
+  const routes = await source.routes()
+  const done: (string | null)[] = new Array(routes.length).fill(null)
+  let next = 0
+  const worker = async () => {
+    for (let i = next++; i < routes.length; i = next++) {
+      const { path } = routes[i] as { path: string[] }
+      const route = await source.route(path)
+      if (!route) continue
+      const html = await renderPage(source, root, route.slug, route.locale)
+      if (!html) continue
+      const file = outFile(out, path)
+      mkdirSync(dirname(file), { recursive: true })
+      writeFileSync(file, html)
+      done[i] = `/${path.join('/')}`
+    }
   }
-  await writeHostOutput(await brease.getRedirects().catch(() => []), out, opts.host ?? detectHost())
+  await Promise.all(Array.from({ length: Math.min(BUILD_CONCURRENCY, routes.length) }, worker))
+  const pages = done.filter((p): p is string => p !== null)
+  await writeHostOutput(await source.getRedirects().catch(() => []), out, opts.host ?? detectHost())
   return { pages, out }
 }
 

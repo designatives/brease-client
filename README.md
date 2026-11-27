@@ -44,8 +44,11 @@ const brease = createBrease({
   apiUrl: process.env.BREASE_API_URL, // default, falls back to https://api.brease.io
   commit: process.env.VERCEL_GIT_COMMIT_SHA, // default (or WORKERS_CI_COMMIT_SHA, CF_PAGES_COMMIT_SHA); false disables commit pinning
   branch: process.env.VERCEL_GIT_COMMIT_REF, // default (or WORKERS_CI_BRANCH, CF_PAGES_BRANCH); only Brease draft branches (brease/draft/…) are sent
-  fetch // optional custom fetch, e.g. to add framework cache options
+  fetch, // optional custom fetch, e.g. to add framework cache options
+  cacheMs: 0 // default: off. Keeps responses this long in this instance's memory; a page can be stale up to that long after a publish. Never used in the editor's preview or on draft branches.
 })
+
+// Identical requests in flight at the same time (one render reading the same page twice, or renders running together) share one API call.
 
 await brease.getSite() // name, url (the public address), locales, defaultLocale, localeStrategy, global SEO, analytics
 await brease.getPage<Home>('', { locale: 'en' }) // Page<Home> | null ('' is the home page)

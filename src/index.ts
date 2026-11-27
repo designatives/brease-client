@@ -55,6 +55,9 @@ export type BreaseOptions = {
   // without Brease. Also BREASE_OFFLINE=1 (folder: BREASE_SEED_DIR, default "brease-seed"; image URLs start
   // with BREASE_OFFLINE_MEDIA_URL, default "/").
   offline?: boolean | { dir?: string; mediaUrl?: string }
+  // Keep content responses this many ms in this instance's memory (off by default; never in the editor's
+  // preview or on a draft branch). Per instance: after a publish, a page can be stale for up to this long.
+  cacheMs?: number
 }
 
 export interface Brease {
@@ -127,6 +130,13 @@ export function withLastGood(
 // Bumped by clearBreaseCache: every client then re-reads its site and redirects on next use.
 let cacheGeneration = 0
 
+// Identical requests in flight at the same time (one render asking for the same page twice, or several renders
+// at once) share one API call. Keyed by URL, token, commit and draft branch, so draft content can't reach a
+// production render. Each caller parses its own copy. With cacheMs, finished responses are kept too.
+type Shared = { body: Promise<string | null>; until: number; generation: number }
+const defaultFetch: typeof fetch = (input, init) => fetch(input, init)
+const sharedByFetch = new WeakMap<typeof fetch, Map<string, Shared>>()
+
 // Drops the site and redirects every client keeps for a minute; revalidateHandler calls it on a publish.
 export function clearBreaseCache() {
   cacheGeneration++
@@ -156,7 +166,9 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
         },
         offlineOpts.mediaUrl ?? env('BREASE_OFFLINE_MEDIA_URL') ?? '/'
       )
-    : (opts.fetch ?? ((input, init) => fetch(input, init)))
+    : (opts.fetch ?? defaultFetch)
+  const shared = sharedByFetch.get(doFetch) ?? new Map<string, Shared>()
+  sharedByFetch.set(doFetch, shared)
   // Re-read after a minute, so a locale added in Brease is served without a restart. While Brease can't be
   // reached, the last good value is served (and kept for another minute) instead of failing every request.
   // The editor's preview (BREASE_PREVIEW=1) always reads fresh, like breaseFetch.
@@ -201,6 +213,34 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
     for (const [k, v] of Object.entries(query)) if (v !== undefined) params.set(k, v)
     const qs = params.toString()
     const url = `${apiUrl}${path}${qs ? `?${qs}` : ''}`
+    const key = `${token}\n${commit ?? ''}\n${draftBranch ?? ''}\n${nullOn404 ? 1 : 0}\n${url}`
+    const now = Date.now()
+    let entry = shared.get(key)
+    if (
+      !entry ||
+      (entry.until !== Number.POSITIVE_INFINITY && entry.until < now) ||
+      entry.generation !== cacheGeneration
+    ) {
+      const keepMs = env('BREASE_PREVIEW') || draftBranch ? 0 : Math.max(0, opts.cacheMs ?? 0)
+      const body = fetchBody(url, token, nullOn404)
+      const created: Shared = { body, until: Number.POSITIVE_INFINITY, generation: cacheGeneration }
+      entry = created
+      shared.set(key, created)
+      body.then(
+        () => {
+          if (keepMs > 0) created.until = Date.now() + keepMs
+          else if (shared.get(key) === created) shared.delete(key)
+        },
+        () => {
+          if (shared.get(key) === created) shared.delete(key)
+        }
+      )
+    }
+    const text = await entry.body
+    return text === null ? null : (JSON.parse(text) as T)
+  }
+
+  async function fetchBody(url: string, token: string, nullOn404: boolean): Promise<string | null> {
     const headers: Record<string, string> = { authorization: `Bearer ${token}`, accept: 'application/json' }
     if (commit) headers['x-brease-commit'] = commit
     if (draftBranch) headers['x-brease-branch'] = draftBranch
@@ -217,7 +257,7 @@ export function createBrease(opts: BreaseOptions = {}): Brease {
         }
         throw new BreaseError('network', `Request to ${url} failed: ${(err as Error).message}`, 0)
       }
-      if (res.ok) return (await res.json()) as T
+      if (res.ok) return await res.text()
       if (res.status === 404 && nullOn404) return null
       if ((res.status === 429 || res.status >= 500) && attempt < retries) {
         const after = Number(res.headers.get('retry-after'))
