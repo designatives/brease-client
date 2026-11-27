@@ -80,8 +80,15 @@ export type Site = {
   url?: string | null
 }
 
-// An image field in page content.
-export type BreaseImage = { assetId: string; url: string; alt?: string; width?: number; height?: number }
+// An image field in page content. `widths`: the resized WebP copies Brease made (see imageProps).
+export type BreaseImage = {
+  assetId: string
+  url: string
+  alt?: string
+  width?: number
+  height?: number
+  widths?: number[]
+}
 
 // A link field in page content. An internal link also names its page: the delivery API sets its href to that
 // page's URL in the requested locale, so renaming a page never breaks it. An external link is just the href.

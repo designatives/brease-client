@@ -609,16 +609,20 @@ export function Sections({ sections }: { sections: BreaseSection[] }) {
 ## Images
 
 ```ts
-import { imageProps } from 'brease-client/image'
+import { imageProps } from 'brease-client'
 
-const props = imageProps(page.content.hero.image)
-// <img src={props.src} alt={props.alt} width={props.width} height={props.height} />
+const props = imageProps(page.content.hero.image, { sizes: '(min-width: 1024px) 50vw, 100vw' })
+// <img src={props.src} srcSet={props.srcSet} sizes={props.sizes} alt={props.alt} width={props.width} height={props.height} />
 ```
 
-An image field is `{ assetId, url, alt, width?, height? }` (`BreaseImage`); `imageProps` takes the field or a plain
-URL. Brease files are served as-is from storage, which doesn't resize images: the helpers return the URL unchanged,
-without `srcSet` or `sizes` (the resize options are ignored). For responsive images, let your framework resize them, e.g. `next/image` with the host of
-your Brease image URLs in `images.remotePatterns`.
+An image field is `{ assetId, url, alt, width?, height?, widths? }` (`BreaseImage`); `imageProps` takes the field or
+a plain URL. Brease makes resized WebP copies of library images (320, 640, 960, 1280 and 1920 px wide, those below
+the original's width) and the delivery API lists them in `widths`, with the original's `width` and `height`. With
+them, `imageProps` returns a `srcSet` of the copies (`<url>.w<width>.webp`) plus the original, and `sizes`
+(default `100vw`); `widths` in the options keeps it to some of them. Without copies (a new upload is resized within
+a few minutes, SVGs and GIFs never are) it returns the URL alone. `imageUrl` passes a URL through unchanged. If your
+framework resizes images itself (e.g. `next/image` with your Brease image host in `images.remotePatterns`), use
+`src`, `width` and `height` and leave `srcSet` out.
 
 ## Content links
 
